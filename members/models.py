@@ -18,6 +18,10 @@ class Member(models.Model):
         MALE = 'M', 'Male'
         FEMALE = 'F', 'Female'
     
+    class AgeCategory(models.TextChoices):
+        ADULT = 'ADULT', 'Adult'
+        CHILD = 'CHILD', 'Child'
+    
     class MembershipStatus(models.TextChoices):
         ACTIVE = 'ACTIVE', 'Active'
         EXPIRED = 'EXPIRED', 'Expired'
@@ -38,6 +42,12 @@ class Member(models.Model):
         max_length=1,
         choices=Gender.choices,
         blank=True
+    )
+    age_category = models.CharField(
+        max_length=10,
+        choices=AgeCategory.choices,
+        blank=True,
+        help_text='Age category: Adult or Child'
     )
     phone = models.CharField(
         max_length=20,

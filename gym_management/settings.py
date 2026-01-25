@@ -44,6 +44,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -142,8 +143,10 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20,
+    'DEFAULT_PAGINATION_CLASS': 'gym_management.pagination.CustomPageNumberPagination',
+    'PAGE_SIZE': 20,  # Default page size
+    'PAGE_SIZE_QUERY_PARAM': 'page_size',  # Allow client to set page size
+    'MAX_PAGE_SIZE': 1000,  # Maximum allowed page size
 }
 
 
@@ -161,5 +164,7 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
+    'http://localhost:60293',
+    'http://127.0.0.1:60293',
 ]
 CORS_ALLOW_CREDENTIALS = True

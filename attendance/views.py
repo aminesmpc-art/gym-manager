@@ -50,4 +50,8 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         """
         Auto-assign recorded_by to current staff member.
         """
-        serializer.save(recorded_by=self.request.user)
+        from django.utils import timezone
+        serializer.save(
+            recorded_by=self.request.user,
+            check_in_time=timezone.now().time()
+        )

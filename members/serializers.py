@@ -17,7 +17,7 @@ class MemberSerializer(serializers.ModelSerializer):
         model = Member
         fields = [
             'id', 'user', 'first_name', 'last_name', 'full_name',
-            'date_of_birth', 'gender', 'phone', 'email', 'address',
+            'date_of_birth', 'gender', 'age_category', 'phone', 'email', 'address',
             'emergency_contact_name', 'emergency_contact_phone',
             'activity_type', 'activity_type_name',
             'membership_plan', 'plan_name',
@@ -27,7 +27,7 @@ class MemberSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'subscription_start', 'subscription_end', 
+            'user', 'subscription_end', 
             'membership_status', 'days_remaining',
             'is_kid', 'created_at', 'updated_at'
         ]
