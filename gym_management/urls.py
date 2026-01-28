@@ -1,11 +1,8 @@
-"""
-URL configuration for gym_management project.
-"""
-
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
 from users.views import CustomTokenObtainPairView
+from users.urls import payment_urls
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -16,6 +13,7 @@ urlpatterns = [
     
     # API endpoints
     path('api/users/', include('users.urls')),
+    path('api/staff-payments/', include(payment_urls)),
     path('api/gym/', include('gym.urls')),
     path('api/members/', include('members.urls')),
     path('api/subscriptions/', include('subscriptions.urls')),

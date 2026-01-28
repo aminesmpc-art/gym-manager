@@ -15,7 +15,7 @@ class Command(BaseCommand):
         self.stdout.write('Seeding data...')
 
         # 1. Ensure Activities exist
-        activities = ['Bodybuilding', 'Cardio', 'CrossFit', 'Yoga', 'Boxing']
+        activities = ['Bodybuilding', 'Cardio', 'Yoga', 'Boxing']
         activity_objs = []
         for name in activities:
             obj, _ = ActivityType.objects.get_or_create(name=name, defaults={'description': f'{name} classes'})
@@ -23,10 +23,9 @@ class Command(BaseCommand):
         
         # 2. Ensure Plans exist
         plans_data = [
-            ('Monthly Standard', 30, 3000),
-            ('Monthly Premium', 30, 5000),
-            ('Quarterly', 90, 8000),
-            ('Yearly', 365, 25000),
+            ('Monthly Standard', 30, 200),
+            ('Quarterly', 90, 350),
+            ('Yearly', 365, 1200),
         ]
         plan_objs = []
         for name, duration, price in plans_data:

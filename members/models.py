@@ -89,6 +89,8 @@ class Member(models.Model):
     # Metadata
     notes = models.TextField(blank=True, help_text='Internal notes about the member')
     is_active = models.BooleanField(default=True, help_text='Whether the member account is active')
+    is_archived = models.BooleanField(default=False, help_text='Archived members are hidden but not deleted')
+    archived_at = models.DateTimeField(null=True, blank=True, help_text='When the member was archived')
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

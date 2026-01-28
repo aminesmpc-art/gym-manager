@@ -23,24 +23,45 @@ class MemberViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     
     # Filter fields
-    filterset_fields = ['activity_type', 'membership_plan', 'is_active', 'gender']
+    filterset_fields = ['activity_type', 'membership_plan', 'is_active', 'is_archived', 'gender']
     search_fields = ['first_name', 'last_name', 'phone', 'email', 'user__username']
-    ordering_fields = ['created_at', 'last_name', 'subscription_end']
+    ordering_fields = ['created_at', 'last_name', 'subscription_end', 'archived_at']
     ordering = ['-created_at']
 
     def get_queryset(self):
         """
         Filter queryset based on user role.
-        - Admin/Staff: See all members
+        - Admin: See all members
+        - Staff: See members based on allowed_gender (M, F, or CHILD)
         - Member: See ONLY their own record
         """
         user = self.request.user
+        base_queryset = Member.objects.select_related('user', 'activity_type', 'membership_plan')
         
-        if user.is_admin or user.is_staff_member:
-            return Member.objects.select_related('user', 'activity_type', 'membership_plan').all()
+        # Filter by archived status (default: show non-archived)
+        show_archived = self.request.query_params.get('archived', 'false').lower() == 'true'
+        if show_archived:
+            base_queryset = base_queryset.filter(is_archived=True)
+        else:
+            base_queryset = base_queryset.filter(is_archived=False)
+        
+        if user.is_admin:
+            return base_queryset.all()
+            
+        if user.is_staff_member:
+            # If staff has allowed_gender restriction, filter members
+            if user.allowed_gender:
+                if user.allowed_gender == 'CHILD':
+                    # Filter by age_category if it exists, otherwise by is_child field
+                    return base_queryset.filter(age_category='CHILD')
+                else:
+                    # Filter by gender (M or F) and exclude children
+                    return base_queryset.filter(gender=user.allowed_gender).exclude(age_category='CHILD')
+            # No restriction, see all
+            return base_queryset.all()
             
         if user.is_gym_member:
-            return Member.objects.select_related('user', 'activity_type', 'membership_plan').filter(user=user)
+            return base_queryset.filter(user=user)
             
         return Member.objects.none()
 
@@ -185,4 +206,48 @@ class MemberViewSet(viewsets.ModelViewSet):
             'status': 'success',
             'message': f'Member {status_text}',
             'is_active': member.is_active
+        })
+
+    @action(detail=True, methods=['post'])
+    def archive(self, request, pk=None):
+        """Archive a member (soft delete)."""
+        from django.utils import timezone
+        member = self.get_object()
+        
+        if member.is_archived:
+            return Response({
+                'status': 'error',
+                'message': 'Member is already archived'
+            }, status=400)
+        
+        member.is_archived = True
+        member.archived_at = timezone.now()
+        member.save(update_fields=['is_archived', 'archived_at', 'updated_at'])
+        
+        return Response({
+            'status': 'success',
+            'message': 'Member archived successfully',
+            'is_archived': True,
+            'archived_at': member.archived_at
+        })
+
+    @action(detail=True, methods=['post'])
+    def restore(self, request, pk=None):
+        """Restore an archived member."""
+        member = self.get_object()
+        
+        if not member.is_archived:
+            return Response({
+                'status': 'error',
+                'message': 'Member is not archived'
+            }, status=400)
+        
+        member.is_archived = False
+        member.archived_at = None
+        member.save(update_fields=['is_archived', 'archived_at', 'updated_at'])
+        
+        return Response({
+            'status': 'success',
+            'message': 'Member restored successfully',
+            'is_archived': False
         })

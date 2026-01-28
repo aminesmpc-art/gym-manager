@@ -23,7 +23,7 @@ class MemberSerializer(serializers.ModelSerializer):
             'membership_plan', 'plan_name',
             'subscription_start', 'subscription_end',
             'membership_status', 'days_remaining',
-            'is_kid', 'is_active', 'notes',
+            'is_kid', 'is_active', 'is_archived', 'archived_at', 'notes',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
