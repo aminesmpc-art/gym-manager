@@ -25,3 +25,9 @@ services:
         value: "*"
       - key: PYTHON_VERSION
         value: "3.10.0"
+      - key: DJANGO_SUPERUSER_USERNAME
+        value: "admin"
+      - key: DJANGO_SUPERUSER_EMAIL
+        value: "admin@example.com"
+      - key: DJANGO_SUPERUSER_PASSWORD
+        generateValue: true
