@@ -26,8 +26,8 @@ services:
       - key: PYTHON_VERSION
         value: "3.10.0"
       - key: DJANGO_SUPERUSER_USERNAME
-        value: "admin"
+        value: "achraf"
       - key: DJANGO_SUPERUSER_EMAIL
-        value: "admin@example.com"
+        value: "amine.smpc@gmail.com"
       - key: DJANGO_SUPERUSER_PASSWORD
-        generateValue: true
+        value: "achraf123Q"
