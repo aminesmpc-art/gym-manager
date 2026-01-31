@@ -157,3 +157,40 @@ class Member(models.Model):
         self.subscription_start = start_date
         self.subscription_end = start_date + timedelta(days=self.membership_plan.duration_days)
         self.save(update_fields=['subscription_start', 'subscription_end', 'updated_at'])
+
+
+class NotificationLog(models.Model):
+    """
+    Tracks sent notifications to prevent duplicates.
+    """
+    class NotificationType(models.TextChoices):
+        REMINDER_3_DAYS = 'REMINDER_3_DAYS', '3-Day Reminder'
+        EXPIRED_UNPAID = 'EXPIRED_UNPAID', 'Expired Unpaid'
+
+    member = models.ForeignKey(
+        Member,
+        on_delete=models.CASCADE,
+        related_name='notification_logs'
+    )
+    notification_type = models.CharField(
+        max_length=20,
+        choices=NotificationType.choices
+    )
+    # Crucial: We track the specific end date to allow new notifications 
+    # when the member renews (and gets a new end date).
+    subscription_end_date = models.DateField(
+        help_text='The subscription end date this notification refers to'
+    )
+    sent_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, default='SENT') 
+
+    class Meta:
+        db_table = 'notification_logs'
+        ordering = ['-sent_at']
+        indexes = [
+            # Composite index for fast duplicate checking
+            models.Index(fields=['member', 'notification_type', 'subscription_end_date']),
+        ]
+    
+    def __str__(self):
+        return f"{self.member} - {self.notification_type} ({self.sent_at.date()})"

@@ -51,3 +51,11 @@ class MemberAccessPolicy(permissions.BasePermission):
             return obj.user == request.user and request.method in permissions.SAFE_METHODS
             
         return False
+
+
+class IsAdminOrStaff(permissions.BasePermission):
+    """
+    Allows access only to Admin or Staff users.
+    """
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and (request.user.is_admin or request.user.is_staff_member)

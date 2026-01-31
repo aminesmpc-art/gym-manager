@@ -6,7 +6,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import User, StaffPayment
 from .serializers import (
     UserSerializer, UserCreateSerializer, UserUpdateSerializer,
-    StaffPaymentSerializer, StaffPaymentCreateSerializer
+    StaffPaymentSerializer, StaffPaymentCreateSerializer,
+    ChangePasswordSerializer
 )
 
 
@@ -161,6 +162,30 @@ class UserViewSet(viewsets.ModelViewSet):
             'message': 'User restored successfully',
             'is_archived': False
         })
+
+    @action(detail=False, methods=['get'])
+    def me(self, request):
+        """Get the current authenticated user's profile."""
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def change_password(self, request):
+        """Change the current user's password."""
+        serializer = ChangePasswordSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            request.user.set_password(serializer.validated_data['new_password'])
+            request.user.save(update_fields=['password', 'updated_at'])
+            return Response({
+                'status': 'success',
+                'message': 'Password changed successfully'
+            })
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class IsAdminOrOwnPayments(permissions.BasePermission):

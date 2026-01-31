@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Member
 from .serializers import MemberSerializer
-from gym_management.permissions import MemberAccessPolicy
+from gym_management.permissions import MemberAccessPolicy, IsAdminOrStaff
 
 class MemberViewSet(viewsets.ModelViewSet):
     """
@@ -44,6 +44,20 @@ class MemberViewSet(viewsets.ModelViewSet):
             base_queryset = base_queryset.filter(is_archived=True)
         else:
             base_queryset = base_queryset.filter(is_archived=False)
+        
+        # Filter by expiring soon (next 7 days, excluding today if preferred, or including)
+        # User requested: "active memberships that will expire within the next 7 days"
+        # and "Exclude all already expired"
+        if self.request.query_params.get('expiring_soon', 'false').lower() == 'true':
+            from django.utils import timezone
+            from datetime import timedelta
+            today = timezone.now().date()
+            next_week = today + timedelta(days=7)
+            base_queryset = base_queryset.filter(
+                subscription_end__gte=today,
+                subscription_end__lte=next_week,
+                is_active=True # Ensure we only get active members
+            )
         
         if user.is_admin:
             return base_queryset.all()
@@ -149,7 +163,29 @@ class MemberViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def renew_subscription(self, request, pk=None):
         member = self.get_object()
-        plan = member.membership_plan
+        
+        # Optional: Update activity type and plan if provided
+        new_activity_id = request.data.get('activity_type_id')
+        new_plan_id = request.data.get('plan_id')
+        
+        if new_activity_id:
+            from gym.models import ActivityType
+            try:
+                new_activity = ActivityType.objects.get(id=new_activity_id)
+                member.activity_type = new_activity
+            except ActivityType.DoesNotExist:
+                return Response({'error': 'Invalid activity type'}, status=400)
+        
+        if new_plan_id:
+            from gym.models import MembershipPlan
+            try:
+                new_plan = MembershipPlan.objects.get(id=new_plan_id)
+                member.membership_plan = new_plan
+                plan = new_plan
+            except MembershipPlan.DoesNotExist:
+                return Response({'error': 'Invalid membership plan'}, status=400)
+        else:
+            plan = member.membership_plan
         
         if not plan:
              return Response({'error': 'Member has no plan assigned'}, status=400)
@@ -166,15 +202,27 @@ class MemberViewSet(viewsets.ModelViewSet):
              start_date = member.subscription_end + timedelta(days=1)
         else:
              start_date = today
-             
-        end_date = start_date + timedelta(days=plan.duration_days)
+        
+        # Use plan duration
+        duration_days = plan.duration_days
+        end_date = start_date + timedelta(days=duration_days)
         
         # Create Payment
         if plan.price > 0:
+            # Use custom amount if provided, otherwise use plan price
+            custom_amount = request.data.get('amount')
+            if custom_amount:
+                try:
+                    amount = float(custom_amount)
+                except (ValueError, TypeError):
+                    amount = plan.price
+            else:
+                amount = plan.price
+                
             Payment.objects.create(
                 member=member,
                 membership_plan=plan,
-                amount=plan.price,
+                amount=amount,
                 payment_date=today,
                 payment_method='CASH',
                 period_start=start_date,
@@ -183,7 +231,7 @@ class MemberViewSet(viewsets.ModelViewSet):
                 created_by=request.user
             )
         
-        # Update Member
+        # Update Member subscription dates and save activity/plan changes
         member.subscription_start = start_date
         member.subscription_end = end_date
         member.save()
@@ -191,7 +239,9 @@ class MemberViewSet(viewsets.ModelViewSet):
         return Response({
             'status': 'success',
             'message': f'Renewed until {end_date}',
-            'subscription_end': end_date
+            'subscription_end': end_date,
+            'activity_type': member.activity_type.name if member.activity_type else None,
+            'membership_plan': plan.name
         })
 
     @action(detail=True, methods=['post'])
@@ -251,3 +301,50 @@ class MemberViewSet(viewsets.ModelViewSet):
             'message': 'Member restored successfully',
             'is_archived': False
         })
+
+
+class NotificationBotView(viewsets.ViewSet):
+    """
+    API Control Panel for WhatsApp Notification Bot.
+    """
+    permission_classes = [IsAuthenticated, IsAdminOrStaff]
+
+    @action(detail=False, methods=['get'])
+    def status(self, request):
+        """Get today's notification statistics."""
+        from .models import NotificationLog
+        from django.utils import timezone
+        
+        today = timezone.now().date()
+        logs = NotificationLog.objects.filter(sent_at__date=today)
+        
+        stats = {
+            'total_today': logs.count(),
+            'reminders': logs.filter(notification_type='REMINDER_3_DAYS').count(),
+            'expired_alerts': logs.filter(notification_type='EXPIRED_UNPAID').count(),
+            'last_run': logs.first().sent_at if logs.exists() else None
+        }
+        return Response(stats)
+
+    @action(detail=False, methods=['post'])
+    def run(self, request):
+        """Manually trigger the bot."""
+        from django.core.management import call_command
+        from io import StringIO
+        
+        out = StringIO()
+        try:
+            # Run the management command and capture output
+            call_command('run_whatsapp_bot', stdout=out)
+            output = out.getvalue()
+            
+            return Response({
+                'status': 'success',
+                'message': 'Bot executed successfully',
+                'log': output
+            })
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
