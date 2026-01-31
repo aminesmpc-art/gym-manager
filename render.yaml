@@ -1,0 +1,27 @@
+databases:
+  - name: gym-db
+    databaseName: gym_db
+    user: gym_user
+    plan: free
+
+services:
+  - type: web
+    name: gym-backend
+    env: python
+    plan: free
+    branch: main
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn gym_management.wsgi:application"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gym-db
+          property: internalConnectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: "*"
+      - key: PYTHON_VERSION
+        value: "3.10.0"
