@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'subscriptions',
     'attendance',
     'reports',
+    'notifications',
 ]
 
 MIDDLEWARE = [
