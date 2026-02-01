@@ -391,25 +391,25 @@ class RevenueChartView(views.APIView):
                     ).count()
                 values.append(float(val))
 
-        else:  # month (default) - last 30 days grouped by week
+        else:  # month (default) - last 4 weeks including current week
             for i in range(3, -1, -1):
-                week_start = today - timedelta(days=(i + 1) * 7)
-                week_end = today - timedelta(days=i * 7)
+                week_start = today - timedelta(days=(i + 1) * 7 - 1)
+                week_end = today - timedelta(days=i * 7) + timedelta(days=1)  # Include end day
                 labels.append(f'Week {4 - i}')
                 if chart_type == 'income':
                     val = Payment.objects.filter(
                         payment_date__gte=week_start,
-                        payment_date__lt=week_end
+                        payment_date__lte=week_end
                     ).aggregate(total=Sum('amount'))['total'] or 0
                 elif chart_type == 'attendance':
                     val = Attendance.objects.filter(
                         date__gte=week_start,
-                        date__lt=week_end
+                        date__lte=week_end
                     ).count()
                 else:
                     val = Member.objects.filter(
                         created_at__date__gte=week_start,
-                        created_at__date__lt=week_end
+                        created_at__date__lte=week_end
                     ).count()
                 values.append(float(val))
 
