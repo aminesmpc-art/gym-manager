@@ -11,7 +11,7 @@ ENV DJANGO_SUPERUSER_EMAIL=admin@gym.local
 ENV DJANGO_SUPERUSER_PASSWORD=admin123
 
 # Railway domain for tenant setup
-ENV RAILWAY_PUBLIC_DOMAIN=gym-backend-production-2b99.up.railway.app
+ENV RAILWAY_PUBLIC_DOMAIN=gym-backend-production-1547.up.railway.app
 
 # Set work directory
 WORKDIR /app
