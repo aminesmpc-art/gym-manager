@@ -61,8 +61,7 @@ TENANT_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.auth',
     
-    # Local apps - isolated per gym
-    'users',
+    # Local apps - isolated per gym (users removed - now in SHARED_APPS)
     'gym',
     'members',
     'subscriptions',
