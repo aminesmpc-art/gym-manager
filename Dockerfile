@@ -5,6 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
+# Default superuser credentials (can be overridden by Railway env vars)
+ENV DJANGO_SUPERUSER_USERNAME=admin
+ENV DJANGO_SUPERUSER_EMAIL=admin@gym.local
+ENV DJANGO_SUPERUSER_PASSWORD=admin123
+
 # Set work directory
 WORKDIR /app
 
@@ -30,5 +35,8 @@ RUN python manage.py collectstatic --noinput
 # Expose port
 EXPOSE $PORT
 
-# Start server - use migrate_schemas for django-tenants
-CMD ["sh", "-c", "python manage.py migrate_schemas --shared && python manage.py migrate_schemas && gunicorn gym_management.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4 --worker-class gthread --log-level info --access-logfile - --error-logfile -"]
+# Start script - runs migrations, creates superuser, then starts server
+CMD sh -c "python manage.py migrate_schemas --shared && \
+    python manage.py migrate_schemas && \
+    python manage.py create_superuser_if_needed && \
+    gunicorn gym_management.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4 --worker-class gthread --log-level info --access-logfile - --error-logfile -"
