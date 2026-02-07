@@ -9,7 +9,7 @@ from django_tenants.utils import schema_context
 
 
 class Command(BaseCommand):
-    help = 'Create superuser from environment variables if not exists'
+    help = 'Create or update superuser from environment variables'
 
     def handle(self, *args, **options):
         User = get_user_model()
@@ -18,29 +18,42 @@ class Command(BaseCommand):
         email = os.environ.get('DJANGO_SUPERUSER_EMAIL', 'admin@gym.local')
         password = os.environ.get('DJANGO_SUPERUSER_PASSWORD', 'admin123')
         
-        # Create superuser in public schema (shared across all tenants)
+        # Create or update superuser in public schema
         try:
             with schema_context('public'):
-                if not User.objects.filter(username=username).exists():
-                    self.stdout.write(f'Creating superuser: {username}')
-                    User.objects.create_superuser(
-                        username=username,
-                        email=email,
-                        password=password
-                    )
+                user, created = User.objects.update_or_create(
+                    username=username,
+                    defaults={
+                        'email': email,
+                        'is_staff': True,
+                        'is_superuser': True,
+                        'is_active': True,
+                        'role': 'ADMIN',
+                    }
+                )
+                user.set_password(password)
+                user.save()
+                
+                if created:
                     self.stdout.write(self.style.SUCCESS(f'Superuser {username} created!'))
                 else:
-                    self.stdout.write(f'Superuser {username} already exists')
+                    self.stdout.write(self.style.SUCCESS(f'Superuser {username} updated!'))
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f'Error creating superuser: {e}'))
-            # Try without schema context as fallback
+            self.stdout.write(self.style.ERROR(f'Error: {e}'))
+            # Fallback without schema context
             try:
-                if not User.objects.filter(username=username).exists():
-                    User.objects.create_superuser(
-                        username=username,
-                        email=email,
-                        password=password
-                    )
-                    self.stdout.write(self.style.SUCCESS(f'Superuser {username} created (fallback)!'))
+                user, created = User.objects.update_or_create(
+                    username=username,
+                    defaults={
+                        'email': email,
+                        'is_staff': True,
+                        'is_superuser': True,
+                        'is_active': True,
+                        'role': 'ADMIN',
+                    }
+                )
+                user.set_password(password)
+                user.save()
+                self.stdout.write(self.style.SUCCESS(f'Superuser {username} {"created" if created else "updated"} (fallback)!'))
             except Exception as e2:
-                self.stdout.write(self.style.ERROR(f'Fallback also failed: {e2}'))
+                self.stdout.write(self.style.ERROR(f'Fallback failed: {e2}'))
