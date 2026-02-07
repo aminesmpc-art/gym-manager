@@ -97,6 +97,18 @@ class DashboardView(views.APIView):
             total_income = 0
             highest_monthly_income = 0
         
+        # 2b. Debt & Payment Tracking (for dashboard upgrade)
+        # Calculate total debt across all active members
+        active_member_list = members.filter(subscription_end__gte=today)
+        total_debt = sum(m.remaining_debt for m in active_member_list)
+        collected_revenue = sum(float(m.amount_paid) for m in active_member_list)
+        members_with_debt = sum(1 for m in active_member_list if m.remaining_debt > 0)
+        paid_members_count = sum(1 for m in active_member_list if m.remaining_debt == 0)
+        
+        # 2c. Insurance Tracking
+        insurance_paid_count = members.filter(insurance_paid=True).count()
+        insurance_unpaid_count = members.filter(insurance_paid=False).count()
+        
         # 3. Attendance (filtered for staff)
         if user.is_admin:
             attendance_today = Attendance.objects.filter(date=today).count()
@@ -188,6 +200,9 @@ class DashboardView(views.APIView):
                 'type': 'Check-in',
                 'status': get_member_status(member),
                 'gender': member.gender or 'M',
+                'photo_url': member.photo.url if member.photo else None,
+                'member_id': member.id,
+                'action_type': 'checkin',
             })
         
         # Recent signups (members created in last 7 days)
@@ -202,6 +217,9 @@ class DashboardView(views.APIView):
                 'type': 'New Signup',
                 'status': get_member_status(member),
                 'gender': member.gender or 'M',
+                'photo_url': member.photo.url if member.photo else None,
+                'member_id': member.id,
+                'action_type': 'signup',
             })
         
         # Sort by recency (approximation using time string - could be improved)
@@ -324,13 +342,23 @@ class DashboardView(views.APIView):
                 'highest_monthly_income': highest_monthly_income,
                 'currency': 'DH'
             },
+            'debt': {
+                'collected_revenue': collected_revenue,
+                'total_debt': total_debt,
+                'members_with_debt': members_with_debt,
+                'paid_members_count': paid_members_count,
+            },
+            'insurance': {
+                'paid_count': insurance_paid_count,
+                'unpaid_count': insurance_unpaid_count,
+            },
             'trends': {
                 'revenue': revenue_trend,
                 'active_members': members_trend, # Note: this is actually new member growth
                 'attendance': attendance_trend,
                 'expiring': expiring_trend,
             },
-            'activity_breakdown': activity_breakdown,
+            'activity_breakdown': {item['activity_type__name'] or 'Unknown': item['count'] for item in activity_breakdown},
             'recent_activity': recent_activity
         }
         
@@ -353,20 +381,50 @@ class RevenueChartView(views.APIView):
 
         labels = []
         values = []
+        paid_values = []
+        unpaid_values = []
+
+        # Get active member IDs for filtering (consistent with dashboard)
+        active_member_ids = list(
+            Member.objects.filter(subscription_end__gte=today).values_list('id', flat=True)
+        )
 
         if period == 'week':
-            # Last 7 days
+            # Last 7 days - show actual dates
             for i in range(6, -1, -1):
                 day = today - timedelta(days=i)
-                labels.append(day.strftime('%a'))
+                # Show day with date: "Mon 3" or "Feb 3"
+                labels.append(day.strftime('%b %d'))  # e.g., "Feb 03"
                 if chart_type == 'income':
-                    val = Payment.objects.filter(payment_date=day).aggregate(
-                        total=Sum('amount'))['total'] or 0
+                    # Get payments for active members only (consistent with dashboard)
+                    payments = Payment.objects.filter(
+                        payment_date=day,
+                        member_id__in=active_member_ids
+                    ).select_related('member')
+                    total_val = 0
+                    paid_val = 0
+                    unpaid_val = 0
+                    for p in payments:
+                        amt = float(p.amount) if p.amount else 0
+                        total_val += amt
+                        # Check if member still has debt
+                        if p.member and p.member.remaining_debt > 0:
+                            unpaid_val += amt
+                        else:
+                            paid_val += amt
+                    values.append(total_val)
+                    paid_values.append(paid_val)
+                    unpaid_values.append(unpaid_val)
                 elif chart_type == 'attendance':
                     val = Attendance.objects.filter(date=day).count()
+                    values.append(float(val))
+                    paid_values.append(float(val))
+                    unpaid_values.append(0)
                 else:  # members
                     val = Member.objects.filter(created_at__date=day).count()
-                values.append(float(val))
+                    values.append(float(val))
+                    paid_values.append(float(val))
+                    unpaid_values.append(0)
 
         elif period == 'year':
             # Last 12 months
@@ -375,45 +433,90 @@ class RevenueChartView(views.APIView):
                 next_month = (month_date + timedelta(days=32)).replace(day=1)
                 labels.append(month_date.strftime('%b'))
                 if chart_type == 'income':
-                    val = Payment.objects.filter(
+                    payments = Payment.objects.filter(
                         payment_date__gte=month_date,
-                        payment_date__lt=next_month
-                    ).aggregate(total=Sum('amount'))['total'] or 0
+                        payment_date__lt=next_month,
+                        member_id__in=active_member_ids
+                    ).select_related('member')
+                    total_val = 0
+                    paid_val = 0
+                    unpaid_val = 0
+                    for p in payments:
+                        amt = float(p.amount) if p.amount else 0
+                        total_val += amt
+                        if p.member and p.member.remaining_debt > 0:
+                            unpaid_val += amt
+                        else:
+                            paid_val += amt
+                    values.append(total_val)
+                    paid_values.append(paid_val)
+                    unpaid_values.append(unpaid_val)
                 elif chart_type == 'attendance':
                     val = Attendance.objects.filter(
                         date__gte=month_date,
                         date__lt=next_month
                     ).count()
+                    values.append(float(val))
+                    paid_values.append(float(val))
+                    unpaid_values.append(0)
                 else:
                     val = Member.objects.filter(
                         created_at__date__gte=month_date,
                         created_at__date__lt=next_month
                     ).count()
-                values.append(float(val))
+                    values.append(float(val))
+                    paid_values.append(float(val))
+                    unpaid_values.append(0)
 
         else:  # month (default) - last 4 weeks including current week
             for i in range(3, -1, -1):
-                week_start = today - timedelta(days=(i + 1) * 7 - 1)
-                week_end = today - timedelta(days=i * 7) + timedelta(days=1)  # Include end day
-                labels.append(f'Week {4 - i}')
+                week_end = today - timedelta(days=i * 7)
+                week_start = week_end - timedelta(days=6)
+                # Show actual date range, handling cross-month properly
+                if week_start.month == week_end.month:
+                    labels.append(f'{week_start.strftime("%b %d")}-{week_end.strftime("%d")}')
+                else:
+                    labels.append(f'{week_start.strftime("%b %d")} - {week_end.strftime("%b %d")}')
                 if chart_type == 'income':
-                    val = Payment.objects.filter(
+                    payments = Payment.objects.filter(
                         payment_date__gte=week_start,
-                        payment_date__lte=week_end
-                    ).aggregate(total=Sum('amount'))['total'] or 0
+                        payment_date__lte=week_end,
+                        member_id__in=active_member_ids
+                    ).select_related('member')
+                    total_val = 0
+                    paid_val = 0
+                    unpaid_val = 0
+                    for p in payments:
+                        amt = float(p.amount) if p.amount else 0
+                        total_val += amt
+                        if p.member and p.member.remaining_debt > 0:
+                            unpaid_val += amt
+                        else:
+                            paid_val += amt
+                    values.append(total_val)
+                    paid_values.append(paid_val)
+                    unpaid_values.append(unpaid_val)
                 elif chart_type == 'attendance':
                     val = Attendance.objects.filter(
                         date__gte=week_start,
                         date__lte=week_end
                     ).count()
+                    values.append(float(val))
+                    paid_values.append(float(val))
+                    unpaid_values.append(0)
                 else:
                     val = Member.objects.filter(
                         created_at__date__gte=week_start,
                         created_at__date__lte=week_end
                     ).count()
-                values.append(float(val))
+                    values.append(float(val))
+                    paid_values.append(float(val))
+                    unpaid_values.append(0)
 
         total = sum(values)
+        total_paid = sum(paid_values)
+        total_unpaid = sum(unpaid_values)
+        
         # Calculate trend (compare current period to previous)
         trend_percent = 0.0
         if len(values) >= 2 and values[-2] > 0:
@@ -424,7 +527,11 @@ class RevenueChartView(views.APIView):
             'type': chart_type,
             'labels': labels,
             'values': values,
+            'paid_values': paid_values,
+            'unpaid_values': unpaid_values,
             'total': total,
+            'total_paid': total_paid,
+            'total_unpaid': total_unpaid,
             'trend_percent': round(trend_percent, 1),
             'trend_positive': trend_percent >= 0
         })

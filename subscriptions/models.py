@@ -77,10 +77,32 @@ class Payment(models.Model):
         return f"{self.member} - {self.amount} DA ({self.payment_date})"
     
     def save(self, *args, **kwargs):
-        """After saving payment, update member's subscription dates."""
+        """
+        After saving payment:
+        1. Update member's subscription dates
+        2. Handle amount_paid correctly:
+           - RESET if new subscription period (renewal)
+           - ACCUMULATE if same period (debt payment)
+        """
+        is_new = self.pk is None
         super().save(*args, **kwargs)
         
-        # Update member subscription dates
-        self.member.subscription_start = self.period_start
-        self.member.subscription_end = self.period_end
-        self.member.save(update_fields=['subscription_start', 'subscription_end', 'updated_at'])
+        from decimal import Decimal
+        
+        # Check if this is a new subscription period or same period (debt payment)
+        is_new_period = (
+            self.member.subscription_start != self.period_start or
+            self.member.subscription_end != self.period_end
+        )
+        
+        if is_new_period:
+            # NEW subscription period (renewal) - reset amount_paid to this payment
+            self.member.subscription_start = self.period_start
+            self.member.subscription_end = self.period_end
+            self.member.amount_paid = Decimal(str(self.amount))
+        else:
+            # SAME subscription period (debt payment) - accumulate
+            if is_new:
+                self.member.amount_paid = Decimal(str(self.member.amount_paid)) + Decimal(str(self.amount))
+        
+        self.member.save(update_fields=['subscription_start', 'subscription_end', 'amount_paid', 'updated_at'])

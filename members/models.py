@@ -27,6 +27,13 @@ class Member(models.Model):
         EXPIRED = 'EXPIRED', 'Expired'
         PENDING = 'PENDING', 'Pending'
     
+    class Status(models.TextChoices):
+        """Unified status for filtering and display."""
+        ACTIVE = 'active', 'Active'
+        SUSPENDED = 'suspended', 'Suspended'
+        EXPIRED = 'expired', 'Expired'
+        ARCHIVED = 'archived', 'Archived'
+    
     # Link to User account
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -38,6 +45,7 @@ class Member(models.Model):
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     date_of_birth = models.DateField(null=True, blank=True)
+    place_of_birth = models.CharField(max_length=100, blank=True, help_text='Place of Birth')
     gender = models.CharField(
         max_length=1,
         choices=Gender.choices,
@@ -53,8 +61,19 @@ class Member(models.Model):
         max_length=20,
         help_text='Phone number (parent phone for kids)'
     )
+    whatsapp = models.CharField(max_length=20, blank=True, help_text='WhatsApp number')
     email = models.EmailField(blank=True)
     address = models.TextField(blank=True)
+    
+    # Extended Profile
+    cin = models.CharField(max_length=20, blank=True, help_text='National Identity Card')
+    member_code = models.CharField(max_length=20, unique=True, null=True, blank=True, help_text='Gym Member ID (scan/entry)')
+    photo = models.ImageField(upload_to='members/photos/', blank=True, null=True)
+    
+    # Financials
+    insurance_paid = models.BooleanField(default=False, help_text='Has paid yearly insurance')
+    insurance_year = models.CharField(max_length=4, blank=True, help_text='Year of insurance payment')
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text='Amount paid for current subscription')
     
     # Emergency contact
     emergency_contact_name = models.CharField(max_length=100, blank=True)
@@ -134,7 +153,31 @@ class Member(models.Model):
         
         today = timezone.now().date()
         remaining = (self.subscription_end - today).days
+        remaining = (self.subscription_end - today).days
         return max(0, remaining)
+    
+    @property
+    def remaining_debt(self):
+        """Calculate remaining debt (Plan Price - Amount Paid)."""
+        if not self.membership_plan:
+            return 0
+        return max(0, self.membership_plan.price - self.amount_paid)
+    
+    @property
+    def payment_status(self):
+        """
+        Derive payment status based on debt.
+        PAID: No remaining debt
+        PARTIAL: Some payment made but debt remains
+        UNPAID: No payment made
+        """
+        if not self.membership_plan:
+            return 'UNPAID'
+        if self.remaining_debt == 0:
+            return 'PAID'
+        elif self.amount_paid > 0:
+            return 'PARTIAL'
+        return 'UNPAID'
     
     @property
     def is_kid(self):
@@ -145,6 +188,40 @@ class Member(models.Model):
         today = timezone.now().date()
         age = (today - self.date_of_birth).days // 365
         return age < 18
+    
+    @property
+    def computed_status(self) -> str:
+        """
+        Centralized status computation for filtering and display.
+        Priority: ARCHIVED > SUSPENDED > EXPIRED > ACTIVE
+        """
+        if self.is_archived:
+            return self.Status.ARCHIVED
+        if not self.is_active:
+            return self.Status.SUSPENDED
+        if not self.subscription_end or self.subscription_end < timezone.now().date():
+            return self.Status.EXPIRED
+        return self.Status.ACTIVE
+    
+    @property
+    def is_expiring(self) -> bool:
+        """Check if subscription expires within 3 days."""
+        if not self.subscription_end:
+            return False
+        days_left = (self.subscription_end - timezone.now().date()).days
+        return 0 <= days_left <= 3
+    
+    @property
+    def can_checkin(self) -> bool:
+        """
+        Check if member is allowed to check in.
+        Requires: active status AND (no insurance required OR insurance paid)
+        """
+        if self.computed_status != self.Status.ACTIVE:
+            return False
+        if self.membership_plan and self.membership_plan.insurance_required:
+            return self.insurance_paid
+        return True
     
     def renew_subscription(self, start_date=None):
         """

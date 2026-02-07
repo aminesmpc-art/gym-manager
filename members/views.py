@@ -1,4 +1,5 @@
 from rest_framework import viewsets, filters 
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -19,6 +20,7 @@ class MemberViewSet(viewsets.ModelViewSet):
     
     queryset = Member.objects.all()
     serializer_class = MemberSerializer
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
     permission_classes = [IsAuthenticated, MemberAccessPolicy]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     
@@ -30,54 +32,144 @@ class MemberViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """
-        Filter queryset based on user role.
-        - Admin: See all members
-        - Staff: See members based on allowed_gender (M, F, or CHILD)
-        - Member: See ONLY their own record
+        Filter queryset based on user role and apply advanced filters.
         """
         user = self.request.user
         base_queryset = Member.objects.select_related('user', 'activity_type', 'membership_plan')
         
-        # Filter by archived status (default: show non-archived)
+        # 1. Access Control
+        if user.is_staff_member and user.allowed_gender:
+            if user.allowed_gender == 'CHILD':
+                base_queryset = base_queryset.filter(age_category='CHILD')
+            else:
+                base_queryset = base_queryset.filter(gender=user.allowed_gender).exclude(age_category='CHILD')
+        elif user.is_gym_member:
+             return base_queryset.filter(user=user)
+        # Admin sees all (no extra filter)
+
+        # 2. Annotation for calculations (Debt, Days Left, Status Helpers)
+        from django.db.models import F, Q, ExpressionWrapper, DateField, DecimalField, Case, When, Value, CharField, IntegerField
+        from django.db.models.functions import Now, Coalesce
+        from django.utils import timezone
+        
+        today = timezone.now().date()
+        
+        # Annotate DB-side calculations for filtering
+        base_queryset = base_queryset.annotate(
+            plan_price=F('membership_plan__price'),
+            paid_amount=F('amount_paid'),
+            debt_amount=ExpressionWrapper(
+                F('membership_plan__price') - F('amount_paid'), 
+                output_field=DecimalField(max_digits=10, decimal_places=2)
+            ),
+            end_date_annotated=F('subscription_end')
+        )
+
+        # 3. Filters
+        
+        # Archived
         show_archived = self.request.query_params.get('archived', 'false').lower() == 'true'
-        if show_archived:
-            base_queryset = base_queryset.filter(is_archived=True)
-        else:
-            base_queryset = base_queryset.filter(is_archived=False)
-        
-        # Filter by expiring soon (next 7 days, excluding today if preferred, or including)
-        # User requested: "active memberships that will expire within the next 7 days"
-        # and "Exclude all already expired"
-        if self.request.query_params.get('expiring_soon', 'false').lower() == 'true':
-            from django.utils import timezone
+        base_queryset = base_queryset.filter(is_archived=show_archived)
+
+        # Activity
+        activity_id = self.request.query_params.get('activity')
+        if activity_id and activity_id != 'null': # Handle 'null' string just in case
+            base_queryset = base_queryset.filter(activity_type_id=activity_id)
+
+        # Category
+        category = self.request.query_params.get('category')
+        if category:
+            if category.lower() == 'adult':
+                 base_queryset = base_queryset.filter(age_category='ADULT')
+            elif category.lower() == 'kids' or category.lower() == 'child':
+                 base_queryset = base_queryset.filter(age_category='CHILD')
+
+        # Payment (paid | dabt)
+        payment_filter = self.request.query_params.get('payment')
+        if payment_filter:
+            if payment_filter.lower() == 'dabt':
+                base_queryset = base_queryset.filter(debt_amount__gt=0)
+            elif payment_filter.lower() == 'paid':
+                base_queryset = base_queryset.filter(debt_amount__lte=0)
+
+        # Insurance
+        insurance_filter = self.request.query_params.get('insurance')
+        if insurance_filter:
+            if insurance_filter.lower() == 'paid':
+                base_queryset = base_queryset.filter(insurance_paid=True)
+            elif insurance_filter.lower() == 'unpaid':
+                base_queryset = base_queryset.filter(insurance_paid=False)
+
+        # Plan ID filter
+        plan_id = self.request.query_params.get('plan_id')
+        if plan_id:
+            try:
+                base_queryset = base_queryset.filter(membership_plan_id=int(plan_id))
+            except ValueError:
+                pass
+
+        # Has Debt filter (true | false)
+        has_debt = self.request.query_params.get('has_debt')
+        if has_debt is not None:
+            if has_debt.lower() == 'true':
+                base_queryset = base_queryset.filter(debt_amount__gt=0)
+            elif has_debt.lower() == 'false':
+                base_queryset = base_queryset.filter(debt_amount__lte=0)
+
+        # Expires In filter (7 | 3 | expired)
+        expires_in = self.request.query_params.get('expires_in')
+        if expires_in:
             from datetime import timedelta
-            today = timezone.now().date()
-            next_week = today + timedelta(days=7)
-            base_queryset = base_queryset.filter(
-                subscription_end__gte=today,
-                subscription_end__lte=next_week,
-                is_active=True # Ensure we only get active members
-            )
+            if expires_in.lower() == 'expired':
+                base_queryset = base_queryset.filter(subscription_end__lt=today)
+            else:
+                try:
+                    days = int(expires_in)
+                    expiry_limit = today + timedelta(days=days)
+                    base_queryset = base_queryset.filter(
+                        subscription_end__gte=today,
+                        subscription_end__lte=expiry_limit
+                    )
+                except ValueError:
+                    pass
         
-        if user.is_admin:
-            return base_queryset.all()
-            
-        if user.is_staff_member:
-            # If staff has allowed_gender restriction, filter members
-            if user.allowed_gender:
-                if user.allowed_gender == 'CHILD':
-                    # Filter by age_category if it exists, otherwise by is_child field
-                    return base_queryset.filter(age_category='CHILD')
-                else:
-                    # Filter by gender (M or F) and exclude children
-                    return base_queryset.filter(gender=user.allowed_gender).exclude(age_category='CHILD')
-            # No restriction, see all
-            return base_queryset.all()
-            
-        if user.is_gym_member:
-            return base_queryset.filter(user=user)
-            
-        return Member.objects.none()
+        # Legacy expiring_in filter (for backward compatibility)
+        expiring_in = self.request.query_params.get('expiring_in')
+        if expiring_in and not expires_in:  # Only if expires_in not used
+            try:
+                days = int(expiring_in)
+                from datetime import timedelta
+                expiry_limit = today + timedelta(days=days)
+                base_queryset = base_queryset.filter(
+                    subscription_end__gte=today,
+                    subscription_end__lte=expiry_limit
+                )
+            except ValueError:
+                pass
+        
+        # Status Filter (active | expired | pending | expiring | suspended)
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            status = status_filter.lower()
+            from datetime import timedelta
+            if status == 'pending':
+                base_queryset = base_queryset.filter(debt_amount__gt=0)
+            elif status == 'expired':
+                base_queryset = base_queryset.filter(subscription_end__lt=today)
+            elif status == 'active':
+                base_queryset = base_queryset.filter(
+                    subscription_end__gte=today
+                )
+            elif status == 'expiring':
+                next_week = today + timedelta(days=7)
+                base_queryset = base_queryset.filter(
+                    subscription_end__gte=today,
+                    subscription_end__lte=next_week
+                )
+            elif status == 'suspended':
+                base_queryset = base_queryset.filter(is_active=False, is_archived=False)
+
+        return base_queryset.order_by('-created_at')
 
     def perform_create(self, serializer):
         """
@@ -124,11 +216,12 @@ class MemberViewSet(viewsets.ModelViewSet):
         subscription_end = subscription_start + timedelta(days=membership_plan.duration_days)
         
         # Save Member with the new User and subscription dates
-        # Save Member with the new User and subscription dates
+        # Ensure new members are always active (not suspended)
         member = serializer.save(
             user=user,
             subscription_start=subscription_start,
-            subscription_end=subscription_end
+            subscription_end=subscription_end,
+            is_active=True
         )
         
         # Create Payment Record

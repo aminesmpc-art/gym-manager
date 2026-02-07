@@ -1,5 +1,6 @@
 """
 Django settings for gym_management project.
+Configured for multi-tenant SaaS with django-tenants.
 """
 
 import os
@@ -16,11 +17,16 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-me-in-producti
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,.localhost', cast=Csv())
 
 
-# Application definition
-INSTALLED_APPS = [
+# ============= MULTI-TENANCY CONFIG =============
+
+# Shared apps - available to all schemas (public + each tenant)
+SHARED_APPS = [
+    'django_tenants',
+    'tenants',  # Our tenant management app
+    
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -28,12 +34,19 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     
-    # Third party apps
+    # Third party - shared
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+]
+
+# Tenant apps - each gym gets their own isolated data
+TENANT_APPS = [
+    # These MUST be duplicated in tenant schemas for proper isolation
+    'django.contrib.contenttypes',
+    'django.contrib.auth',
     
-    # Local apps
+    # Local apps - isolated per gym
     'users',
     'gym',
     'members',
@@ -43,7 +56,18 @@ INSTALLED_APPS = [
     'notifications',
 ]
 
+# Combined - all apps available
+INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
+
+# Tenant model config
+TENANT_MODEL = 'tenants.Gym'
+TENANT_DOMAIN_MODEL = 'tenants.Domain'
+
+# ============= END MULTI-TENANCY CONFIG =============
+
+
 MIDDLEWARE = [
+    'django_tenants.middleware.main.TenantMainMiddleware',  # Must be first!
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -76,7 +100,7 @@ TEMPLATES = [
 WSGI_APPLICATION = 'gym_management.wsgi.application'
 
 
-# Database - Supabase PostgreSQL via DATABASE_URL
+# Database - PostgreSQL required for django-tenants
 import dj_database_url
 
 DATABASE_URL = config('DATABASE_URL', default='')
@@ -89,30 +113,31 @@ if DATABASE_URL:
             conn_health_checks=True,
         )
     }
+    # Override engine to use django-tenants backend (required for schema routing)
+    DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
 else:
-    # Fallback for local development without Supabase
+    # Local PostgreSQL for development
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+            'ENGINE': 'django_tenants.postgresql_backend',
+            'NAME': config('DB_NAME', default='gym_saas'),
+            'USER': config('DB_USER', default='postgres'),
+            'PASSWORD': config('DB_PASSWORD', default='postgres'),
+            'HOST': config('DB_HOST', default='localhost'),
+            'PORT': config('DB_PORT', default='5432'),
         }
     }
+
+# Required for django-tenants
+DATABASE_ROUTERS = ['django_tenants.routers.TenantSyncRouter']
 
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
 
@@ -126,6 +151,10 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Media files (User uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 
 # Default primary key field type
@@ -145,9 +174,9 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_PAGINATION_CLASS': 'gym_management.pagination.CustomPageNumberPagination',
-    'PAGE_SIZE': 20,  # Default page size
-    'PAGE_SIZE_QUERY_PARAM': 'page_size',  # Allow client to set page size
-    'MAX_PAGE_SIZE': 1000,  # Maximum allowed page size
+    'PAGE_SIZE': 20,
+    'PAGE_SIZE_QUERY_PARAM': 'page_size',
+    'MAX_PAGE_SIZE': 1000,
 }
 
 
@@ -163,10 +192,18 @@ SIMPLE_JWT = {
 
 # CORS Settings
 CORS_ALLOW_ALL_ORIGINS = True
-# CORS_ALLOWED_ORIGINS = [
-#     'http://localhost:3000',
-#     'http://127.0.0.1:3000',
-#     'http://localhost:60293',
-#     'http://127.0.0.1:60293',
-# ]
 CORS_ALLOW_CREDENTIALS = True
+
+
+# Twilio settings (optional - for SMS)
+TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
+TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
+TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')
+
+# CSRF Trusted Origins for Railway Production
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.railway.app',
+    'https://*.up.railway.app',
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+]

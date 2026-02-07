@@ -43,7 +43,40 @@ class ActivityType(models.Model):
     
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
+    
+    # Visual customization
+    icon = models.CharField(
+        max_length=50,
+        blank=True,
+        default='fitness_center',
+        help_text='Material icon name for UI display'
+    )
+    color = models.CharField(
+        max_length=20,
+        blank=True,
+        default='#2196F3',
+        help_text='Hex color for UI display'
+    )
+    
+    # Multi-language support (FR / AR / EN)
+    name_ar = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text='Arabic translation of name'
+    )
+    name_fr = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text='French translation of name'
+    )
+    
     is_active = models.BooleanField(default=True)
+    
+    # Display order for drag & drop reordering
+    order = models.PositiveIntegerField(
+        default=0,
+        help_text='Display order for UI sorting (lower = first)'
+    )
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -52,9 +85,17 @@ class ActivityType(models.Model):
         db_table = 'activity_types'
         verbose_name = 'Activity Type'
         verbose_name_plural = 'Activity Types'
-        ordering = ['name']
+        ordering = ['order', 'name']
     
     def __str__(self):
+        return self.name
+    
+    def get_name(self, lang='en'):
+        """Get localized name based on language code."""
+        if lang == 'ar' and self.name_ar:
+            return self.name_ar
+        if lang == 'fr' and self.name_fr:
+            return self.name_fr
         return self.name
 
 
@@ -62,7 +103,18 @@ class MembershipPlan(models.Model):
     """
     Subscription plans belonging to an ActivityType.
     Each plan has a duration and price.
+    Enhanced with gender/age filtering and insurance requirements.
     """
+    
+    class AllowedGender(models.TextChoices):
+        MALE = 'male', 'Male Only'
+        FEMALE = 'female', 'Female Only'
+        ANY = 'any', 'Any Gender'
+    
+    class AgeCategory(models.TextChoices):
+        ADULT = 'adult', 'Adults Only'
+        KIDS = 'kids', 'Kids Only'
+        ANY = 'any', 'Any Age'
     
     name = models.CharField(max_length=100)
     activity_type = models.ForeignKey(
@@ -79,8 +131,53 @@ class MembershipPlan(models.Model):
         max_digits=10,
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.00'))],
-        help_text='Price in local currency (DA)'
+        help_text='Price in local currency'
     )
+    currency = models.CharField(
+        max_length=5,
+        default='MAD',
+        help_text='Currency code (MAD, EUR, USD)'
+    )
+    
+    # Session limits (null = unlimited)
+    sessions_limit = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Maximum sessions allowed (null = unlimited)'
+    )
+    
+    # Eligibility filters
+    allowed_gender = models.CharField(
+        max_length=10,
+        choices=AllowedGender.choices,
+        default=AllowedGender.ANY,
+        help_text='Gender restriction for this plan'
+    )
+    age_category = models.CharField(
+        max_length=10,
+        choices=AgeCategory.choices,
+        default=AgeCategory.ANY,
+        help_text='Age restriction for this plan'
+    )
+    
+    # Insurance requirement
+    insurance_required = models.BooleanField(
+        default=False,
+        help_text='Whether insurance payment is required for check-in'
+    )
+    
+    # Multi-language support
+    name_ar = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text='Arabic translation of name'
+    )
+    name_fr = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text='French translation of name'
+    )
+    
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     
@@ -92,8 +189,16 @@ class MembershipPlan(models.Model):
         verbose_name = 'Membership Plan'
         verbose_name_plural = 'Membership Plans'
         ordering = ['activity_type', 'duration_days']
-        # Ensure unique plan names within the same activity type
         unique_together = ['activity_type', 'name']
     
     def __str__(self):
         return f"{self.name} - {self.activity_type.name} ({self.duration_days} days)"
+    
+    def get_name(self, lang='en'):
+        """Get localized name based on language code."""
+        if lang == 'ar' and self.name_ar:
+            return self.name_ar
+        if lang == 'fr' and self.name_fr:
+            return self.name_fr
+        return self.name
+
