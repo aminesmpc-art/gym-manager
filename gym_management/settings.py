@@ -79,7 +79,9 @@ TENANT_DOMAIN_MODEL = 'tenants.Domain'
 
 
 MIDDLEWARE = [
-    'django_tenants.middleware.main.TenantMainMiddleware',  # Must be first!
+    # Health check MUST be first - responds before tenant resolution
+    'gym_management.middleware.HealthCheckMiddleware',
+    'django_tenants.middleware.main.TenantMainMiddleware',  # Tenant resolution second
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
