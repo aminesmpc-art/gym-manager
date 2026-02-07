@@ -24,8 +24,14 @@ def root(request):
     )
 
 
+def health(request):
+    """Health check endpoint for Railway deployment."""
+    return JsonResponse({"status": "healthy"})
+
+
 urlpatterns = [
     path('', root, name='root'),
+    path('health/', health, name='health'),
     path('admin/', admin.site.urls),
     
     # JWT Authentication
