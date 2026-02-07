@@ -10,6 +10,9 @@ ENV DJANGO_SUPERUSER_USERNAME=admin
 ENV DJANGO_SUPERUSER_EMAIL=admin@gym.local
 ENV DJANGO_SUPERUSER_PASSWORD=admin123
 
+# Railway domain for tenant setup
+ENV RAILWAY_PUBLIC_DOMAIN=gym-backend-production-2b99.up.railway.app
+
 # Set work directory
 WORKDIR /app
 
@@ -35,8 +38,13 @@ RUN python manage.py collectstatic --noinput
 # Expose port
 EXPOSE $PORT
 
-# Start script - runs migrations, creates superuser, then starts server
+# Start script:
+# 1. Run migrations
+# 2. Setup public tenant with Railway domain
+# 3. Create superuser
+# 4. Start gunicorn
 CMD sh -c "python manage.py migrate_schemas --shared && \
     python manage.py migrate_schemas && \
+    python manage.py setup_public_tenant && \
     python manage.py create_superuser_if_needed && \
     gunicorn gym_management.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4 --worker-class gthread --log-level info --access-logfile - --error-logfile -"
