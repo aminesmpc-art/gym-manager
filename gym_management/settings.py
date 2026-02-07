@@ -50,6 +50,9 @@ SHARED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+    
+    # Users must be shared for super admin auth to work
+    'users',
 ]
 
 # Tenant apps - each gym gets their own isolated data
