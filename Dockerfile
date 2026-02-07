@@ -30,5 +30,5 @@ RUN python manage.py collectstatic --noinput
 # Expose port
 EXPOSE $PORT
 
-# Start server - migrations run in a separate script to not block startup
-CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn gym_management.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4 --worker-class gthread --log-level info --access-logfile - --error-logfile -"]
+# Start server - use migrate_schemas for django-tenants
+CMD ["sh", "-c", "python manage.py migrate_schemas --shared && python manage.py migrate_schemas && gunicorn gym_management.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4 --worker-class gthread --log-level info --access-logfile - --error-logfile -"]
