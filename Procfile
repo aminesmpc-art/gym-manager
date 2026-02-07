@@ -1,1 +1,1 @@
-web: gunicorn gym_management.wsgi --log-file -
+web: python manage.py migrate_schemas --shared && python manage.py migrate_schemas && python manage.py setup_public_tenant && python manage.py create_superuser_if_needed && gunicorn gym_management.wsgi --log-file -
