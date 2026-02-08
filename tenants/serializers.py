@@ -14,6 +14,7 @@ class DomainSerializer(serializers.ModelSerializer):
 
 class GymSerializer(serializers.ModelSerializer):
     domains = DomainSerializer(many=True, read_only=True)
+    member_limit = serializers.IntegerField(read_only=True)
     
     class Meta:
         model = Gym
@@ -26,12 +27,17 @@ class GymSerializer(serializers.ModelSerializer):
             'owner_email',
             'owner_phone',
             'status',
+            'subscription_plan',
+            'subscription_status',
+            'subscription_start',
+            'subscription_end',
+            'member_limit',
             'created_at',
             'approved_at',
             'notes',
             'domains',
         ]
-        read_only_fields = ['id', 'schema_name', 'created_at', 'approved_at']
+        read_only_fields = ['id', 'schema_name', 'created_at', 'approved_at', 'member_limit']
 
 
 class GymRegistrationSerializer(serializers.Serializer):
