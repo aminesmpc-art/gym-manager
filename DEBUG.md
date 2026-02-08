@@ -268,7 +268,7 @@ Progress bar compares: `this month / best month ever`
 
 ## Bug #7: Chart Paid/Pending Classification is WRONG 🔴
 **Date**: 2026-02-09
-**Status**: 🔴 TO FIX
+**Status**: ✅ SOLVED
 
 ### Symptoms
 - Chart tooltip shows: **Paid: 750 DH, Pending: 320 DH**
@@ -340,21 +340,25 @@ Change the chart to show:
 - **Pending (pink bar)** = Sum of remaining debts (money NOT yet received)
 
 ```python
-# NEW LOGIC:
-for day in period:
-    payments = Payment.objects.filter(payment_date=day, ...)
-    paid_val = sum(p.amount for p in payments)  # All received = Paid
-    
-    # Pending = total debts of members who had payments this day
-    members_this_day = set(p.member for p in payments)
-    unpaid_val = sum(m.remaining_debt for m in members_this_day)
+# APPLIED FIX (all 3 period handlers: week/month/year):
+paid_val = sum(float(p.amount) for p in payments if p.amount)
+seen_members = {}
+for p in payments:
+    if p.member and p.member_id not in seen_members:
+        seen_members[p.member_id] = float(p.member.remaining_debt)
+unpaid_val = sum(seen_members.values())
+total_val = paid_val + unpaid_val
 ```
+
+### Status
+- ✅ Fixed in all 3 period handlers (week, month, year)
+- ✅ Deployed to Railway
 
 ---
 
 ## Bug #8: Debt Numbers Differ Between Card and Member Badges 🔴
 **Date**: 2026-02-09
-**Status**: 🔴 TO FIX
+**Status**: ✅ SOLVED
 
 ### Symptoms
 - Revenue Card debt: **80 DH**
@@ -413,6 +417,27 @@ Option B: Fix corrupted data + keep current property:
 python manage.py recalculate_payments  # Already created!
 ```
 
-**Chosen: Option B** - Run recalculate_payments command first. If data drifts again in the future, upgrade to Option A.
+**Chosen: Option A** — Make `remaining_debt` compute from Payment records. Self-healing, no more stale data.
+
+```python
+# APPLIED FIX in members/models.py:
+@property
+def remaining_debt(self):
+    from subscriptions.models import Payment
+    from django.db.models import Sum
+    actual_paid = Payment.objects.filter(
+        member=self,
+        period_start=self.subscription_start,
+        period_end=self.subscription_end,
+    ).aggregate(total=Sum('amount'))['total'] or 0
+    return max(0, self.membership_plan.price - actual_paid)
+```
+
+### Status
+- ✅ `remaining_debt` now computes from Payment records
+- ✅ All data sources (card, chart, badges) use same source of truth
+- ✅ Deployed to Railway
 
 ---
+
+*Last Updated: 2026-02-09*

@@ -52,16 +52,18 @@ All plans have **unlimited members**.
 |-------|--------|----------|
 | Phase 1-5 | ✅ DONE | All core features |
 | Password Management | ✅ DONE | Reset/Set admin passwords |
-| Bug Fixes | ✅ DONE | See DEBUG.md (5 bugs fixed) |
+| Bug Fixes | ✅ DONE | See DEBUG.md (8 bugs fixed) |
 | Phase 6: Production | ❌ Pending | Security, docs |
 
-### 📍 WHERE WE ARE NOW (2026-02-08):
+### 📍 WHERE WE ARE NOW (2026-02-09):
 - ✅ **Create Gym** working
 - ✅ **Password Management** - Reset Password, Set Custom Password
 - ✅ **Credentials shown on approve**
-- ✅ **Payment Doubling Bug FIXED** - amount_paid no longer doubles on member create
-- ✅ **Renewal Payment Reset FIXED** - payment tracking resets on membership renewal
-- ✅ **Image.file Web Fix** - Photo picker now works on Chrome (uses Image.memory)
+- ✅ **Payment Doubling Bug FIXED** (Bug #5)
+- ✅ **Revenue Card = Monthly Scope** (Bug #6) - shows this month's collected revenue
+- ✅ **Chart Paid/Pending FIXED** (Bug #7) - green=received, pink=owed
+- ✅ **Debt Consistency FIXED** (Bug #8) - remaining_debt from Payment records
+- ✅ **Single Source of Truth** - all revenue/debt data uses Payment records
 - ⏭️ Next: Phase 6 (Security & Docs)
 
 ---
@@ -117,10 +119,13 @@ All bugs and solutions documented in **`DEBUG.md`**.
 | #3 | Super Admin Dashboard 500 | ✅ SOLVED |
 | #4 | Create Gym Dialog Overflow | ✅ SOLVED |
 | #5 | Payment Doubling on Create | ✅ SOLVED |
+| #6 | Revenue Card Scope (monthly) | ✅ SOLVED |
+| #7 | Chart Paid/Pending Wrong | ✅ SOLVED |
+| #8 | Debt Mismatch Card vs Badges | ✅ SOLVED |
 
 > Check DEBUG.md when encountering errors!
 
 ---
 
-*Last Updated: 2026-02-08 22:50*
+*Last Updated: 2026-02-09 00:30*
 

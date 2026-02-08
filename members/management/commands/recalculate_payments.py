@@ -49,8 +49,7 @@ class Command(BaseCommand):
                 
                 if not dry_run:
                     member.amount_paid = new_amount
-                    member.remaining_debt = new_debt
-                    member.save(update_fields=['amount_paid', 'remaining_debt', 'updated_at'])
+                    member.save(update_fields=['amount_paid', 'updated_at'])
                 
                 fixed_count += 1
             else:
