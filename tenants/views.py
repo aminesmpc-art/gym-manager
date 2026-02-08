@@ -41,17 +41,25 @@ class GymViewSet(viewsets.ModelViewSet):
             gym.approved_at = timezone.now()
             gym.save()
             
-            # Create admin user for the gym
-            self._create_gym_admin(gym)
+            # Create admin user for the gym and get credentials
+            admin_credentials = self._create_gym_admin(gym)
             
-            return Response({'status': 'approved', 'gym': GymSerializer(gym).data})
+            response_data = {
+                'status': 'approved',
+                'gym': GymSerializer(gym).data,
+            }
+            
+            if admin_credentials:
+                response_data['admin_credentials'] = admin_credentials
+            
+            return Response(response_data)
         return Response(
             {'error': f'Cannot approve gym with status: {gym.status}'},
             status=status.HTTP_400_BAD_REQUEST
         )
     
     def _create_gym_admin(self, gym):
-        """Create an admin user for a newly approved gym."""
+        """Create an admin user for a newly approved gym. Returns credentials dict."""
         try:
             from users.models import User
             from django.utils.crypto import get_random_string
@@ -75,10 +83,20 @@ class GymViewSet(viewsets.ModelViewSet):
                 if created:
                     user.set_password(password)
                     user.save()
-                    # TODO: Send welcome email with credentials
                     print(f"[GymViewSet] Created admin for {gym.name}: {username} / {password}")
+                    return {
+                        'username': username,
+                        'password': password,
+                        'email': gym.owner_email,
+                    }
+                else:
+                    return {
+                        'username': username,
+                        'message': 'Admin user already exists (password unchanged)',
+                    }
         except Exception as e:
             print(f"[GymViewSet] Failed to create admin: {e}")
+            return None
 
     @action(detail=True, methods=['post'])
     def suspend(self, request, pk=None):
