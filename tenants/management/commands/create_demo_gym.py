@@ -28,10 +28,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         from tenants.models import Gym, Domain
-        from gym.models import ActivityType
-        from subscriptions.models import MembershipPlan
-        from members.models import Member, Subscription
-        from attendance.models import Attendance
         
         gym_name = options['name']
         num_members = options['members']
@@ -66,9 +62,14 @@ class Command(BaseCommand):
         
         # Create demo data within the tenant schema
         with tenant_context(gym):
+            # Import models within tenant context
+            from gym.models import ActivityType, MembershipPlan
+            from members.models import Member
+            from attendance.models import Attendance
+            
             self._create_activity_types(ActivityType)
             self._create_plans(MembershipPlan, ActivityType)
-            self._create_members(Member, Subscription, MembershipPlan, ActivityType, num_members)
+            self._create_members(Member, MembershipPlan, num_members)
             self._create_attendance(Attendance, Member)
         
         self.stdout.write(self.style.SUCCESS(f'Demo gym "{gym_name}" created with {num_members} members!'))
@@ -91,26 +92,26 @@ class Command(BaseCommand):
         activities = list(ActivityType.objects.all())
         
         plans = [
-            {'name': 'Monthly Basic', 'duration_months': 1, 'price': 300},
-            {'name': 'Quarterly', 'duration_months': 3, 'price': 800},
-            {'name': 'Semi-Annual', 'duration_months': 6, 'price': 1500},
-            {'name': 'Annual Premium', 'duration_months': 12, 'price': 2800},
+            {'name': 'Monthly', 'duration_days': 30, 'price': 300},
+            {'name': 'Quarterly', 'duration_days': 90, 'price': 800},
+            {'name': 'Semi-Annual', 'duration_days': 180, 'price': 1500},
+            {'name': 'Annual', 'duration_days': 365, 'price': 2800},
         ]
         
         for activity in activities:
             for plan in plans:
                 MembershipPlan.objects.update_or_create(
-                    name=f"{plan['name']} - {activity.name}",
+                    name=plan['name'],
                     activity_type=activity,
                     defaults={
-                        'duration_months': plan['duration_months'],
+                        'duration_days': plan['duration_days'],
                         'price': Decimal(plan['price']),
                         'is_active': True,
                     }
                 )
         self.stdout.write(f'  Created {len(plans) * len(activities)} plans')
 
-    def _create_members(self, Member, Subscription, MembershipPlan, ActivityType, num_members):
+    def _create_members(self, Member, MembershipPlan, num_members):
         self.stdout.write(f'Creating {num_members} demo members...')
         plans = list(MembershipPlan.objects.filter(is_active=True))
         
@@ -118,13 +119,29 @@ class Command(BaseCommand):
             gender = random.choice(['M', 'F'])
             first_name = random.choice(FIRST_NAMES_M if gender == 'M' else FIRST_NAMES_F)
             last_name = random.choice(LAST_NAMES)
+            phone = f'+2126{random.randint(10000000, 99999999)}'
             
-            # Random join date in the past year
-            days_ago = random.randint(1, 365)
-            join_date = timezone.now().date() - timedelta(days=days_ago)
+            # Random subscription status weights: 70% active, 20% expired, 10% pending
+            status_type = random.choices(['active', 'expired', 'pending'], weights=[70, 20, 10])[0]
+            
+            if status_type == 'active':
+                start_date = timezone.now().date() - timedelta(days=random.randint(1, 30))
+                plan = random.choice(plans)
+                end_date = start_date + timedelta(days=plan.duration_days)
+                amount_paid = plan.price
+            elif status_type == 'expired':
+                plan = random.choice(plans)
+                end_date = timezone.now().date() - timedelta(days=random.randint(1, 60))
+                start_date = end_date - timedelta(days=plan.duration_days)
+                amount_paid = plan.price
+            else:  # pending - no subscription dates
+                plan = random.choice(plans)
+                start_date = None
+                end_date = None
+                amount_paid = Decimal('0')
             
             member, created = Member.objects.update_or_create(
-                phone=f'+2126{random.randint(10000000, 99999999)}',
+                phone=phone,
                 defaults={
                     'first_name': first_name,
                     'last_name': last_name,
@@ -133,38 +150,14 @@ class Command(BaseCommand):
                     'date_of_birth': datetime(random.randint(1980, 2005), random.randint(1, 12), random.randint(1, 28)).date(),
                     'address': f'{random.randint(1, 100)} Demo Street',
                     'emergency_contact': f'+2126{random.randint(10000000, 99999999)}',
-                    'notes': '',
+                    'membership_plan': plan,
+                    'subscription_start': start_date,
+                    'subscription_end': end_date,
+                    'amount_paid': amount_paid,
                 }
             )
-            
-            if created:
-                # Create subscription for new members
-                plan = random.choice(plans)
-                status = random.choices(
-                    ['ACTIVE', 'EXPIRED', 'PENDING'],
-                    weights=[70, 20, 10]  # 70% active, 20% expired, 10% pending
-                )[0]
-                
-                if status == 'ACTIVE':
-                    start_date = timezone.now().date() - timedelta(days=random.randint(1, 30))
-                    end_date = start_date + timedelta(days=plan.duration_months * 30)
-                elif status == 'EXPIRED':
-                    end_date = timezone.now().date() - timedelta(days=random.randint(1, 60))
-                    start_date = end_date - timedelta(days=plan.duration_months * 30)
-                else:  # PENDING
-                    start_date = timezone.now().date()
-                    end_date = start_date + timedelta(days=plan.duration_months * 30)
-                
-                Subscription.objects.create(
-                    member=member,
-                    plan=plan,
-                    start_date=start_date,
-                    end_date=end_date,
-                    amount_paid=plan.price if status != 'PENDING' else Decimal('0'),
-                    status=status,
-                )
         
-        self.stdout.write(f'  Created {num_members} members with subscriptions')
+        self.stdout.write(f'  Created {num_members} members')
 
     def _create_attendance(self, Attendance, Member):
         self.stdout.write('Creating attendance records...')
