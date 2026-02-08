@@ -46,7 +46,34 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         username = attrs.get('username')
         password = attrs.get('password')
         
-        # Validate gym_slug exists
+        # Special handling for public schema (Super Admin)
+        if gym_slug == 'public':
+            # Authenticate super admin in public schema
+            with schema_context('public'):
+                user = authenticate(username=username, password=password)
+                if user is None:
+                    raise serializers.ValidationError({'detail': 'Invalid username or password.'})
+                if not user.is_active:
+                    raise serializers.ValidationError({'detail': 'User account is disabled.'})
+                if not user.is_superuser:
+                    raise serializers.ValidationError({'detail': 'Super Admin access required.'})
+                
+                self.user = user
+                
+                # Generate tokens
+                refresh = self.get_token(user, 'public')
+                
+                return {
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token),
+                    'role': user.role,
+                    'username': user.username,
+                    'allowed_gender': user.allowed_gender,
+                    'gym_slug': 'public',
+                    'gym_name': 'Super Admin',
+                }
+        
+        # Validate gym_slug exists for tenant users
         from tenants.models import Gym
         try:
             with schema_context('public'):
