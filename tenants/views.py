@@ -17,8 +17,10 @@ from .serializers import GymSerializer, GymRegistrationSerializer
 
 class AdminResetDemoView(APIView):
     """
-    Reset demo gym data. Uses a secret key instead of login.
-    Usage: POST /api/admin/reset-demo/?secret=gym_reset_2026
+    Admin utility endpoint. Uses a secret key instead of login.
+    Usage: 
+      - POST /api/tenants/admin/reset-demo/?secret=gym_reset_2026 - Reset demo data
+      - POST /api/tenants/admin/reset-demo/?secret=gym_reset_2026&action=create_superuser - Create superuser
     """
     permission_classes = [AllowAny]
     
@@ -31,6 +33,56 @@ class AdminResetDemoView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
+        action = request.query_params.get('action', 'reset_demo')
+        
+        # Create superuser action
+        if action == 'create_superuser':
+            return self._create_superuser()
+        
+        # Default: Reset demo data
+        return self._reset_demo()
+    
+    def _create_superuser(self):
+        """Create/update superuser in public schema."""
+        from django.contrib.auth import get_user_model
+        from django_tenants.utils import schema_context
+        
+        User = get_user_model()
+        try:
+            with schema_context('public'):
+                user, created = User.objects.update_or_create(
+                    username='admin',
+                    defaults={
+                        'email': 'admin@gym.local',
+                        'first_name': 'Super',
+                        'last_name': 'Admin',
+                        'is_staff': True,
+                        'is_superuser': True,
+                        'is_active': True,
+                        'role': 'ADMIN',
+                    }
+                )
+                user.set_password('admin123')
+                user.save()
+                
+                return Response({
+                    'status': 'success',
+                    'message': f'Superuser {"created" if created else "updated"}',
+                    'credentials': {
+                        'gym_slug': 'public',
+                        'username': 'admin',
+                        'password': 'admin123'
+                    }
+                })
+        except Exception as e:
+            import traceback
+            return Response(
+                {'status': 'error', 'message': str(e), 'traceback': traceback.format_exc()},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _reset_demo(self):
+        """Reset demo gym data."""
         from django.core.management import call_command
         from io import StringIO
         import traceback
