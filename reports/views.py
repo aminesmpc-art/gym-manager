@@ -31,6 +31,37 @@ class DashboardView(views.APIView):
     
     def get(self, request):
         user = request.user
+        
+        # Super Admin fallback - return tenants dashboard data
+        if user.is_superuser:
+            from django_tenants.utils import schema_context, get_public_schema_name
+            from django.db import connection
+            
+            # Check if we're in public schema
+            if connection.schema_name == get_public_schema_name():
+                from tenants.models import Gym
+                with schema_context('public'):
+                    total_gyms = Gym.objects.count()
+                    active_gyms = Gym.objects.filter(status='approved').count()
+                    pending_gyms = Gym.objects.filter(status='pending').count()
+                    
+                return Response({
+                    'overview': {
+                        'total_members': total_gyms,  # Map to expected frontend field
+                        'active_members': active_gyms,
+                        'expired_members': 0,
+                        'pending_members': pending_gyms,
+                        'new_members_this_month': 0,
+                        'monthly_revenue': 0,
+                        'monthly_checkins': 0,
+                        'average_daily_checkins': 0,
+                    },
+                    'demographics': {'genders': {}, 'ages': {}},
+                    'recent_activity': [],
+                    'is_super_admin': True,
+                    'message': 'Super Admin Dashboard - Use /api/tenants/dashboard/ for detailed gym data'
+                })
+        
         date_param = request.query_params.get('date')
         if date_param:
             from django.utils.dateparse import parse_date
