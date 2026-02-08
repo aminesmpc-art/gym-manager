@@ -38,6 +38,24 @@ class GymSerializer(serializers.ModelSerializer):
             'domains',
         ]
         read_only_fields = ['id', 'schema_name', 'created_at', 'approved_at', 'member_limit']
+    
+    def create(self, validated_data):
+        """Auto-generate schema_name from slug before creating gym."""
+        import re
+        slug = validated_data.get('slug', '')
+        # Convert slug to valid PostgreSQL schema name:
+        # - Replace hyphens with underscores
+        # - Remove any non-alphanumeric characters except underscores
+        # - Ensure it doesn't start with a number
+        schema_name = slug.replace('-', '_')
+        schema_name = re.sub(r'[^a-z0-9_]', '', schema_name.lower())
+        if schema_name and schema_name[0].isdigit():
+            schema_name = 'gym_' + schema_name
+        if not schema_name:
+            schema_name = 'gym_' + str(validated_data.get('id', 'new'))
+        
+        validated_data['schema_name'] = schema_name
+        return super().create(validated_data)
 
 
 class GymRegistrationSerializer(serializers.Serializer):
