@@ -179,13 +179,20 @@ class Command(BaseCommand):
                 end_date = None
                 amount_paid = Decimal('0')
             
+            # Calculate age category based on date of birth
+            birth_year = random.randint(1980, 2015)
+            dob = datetime(birth_year, random.randint(1, 12), random.randint(1, 28)).date()
+            age = (timezone.now().date() - dob).days // 365
+            age_category = 'ADULT' if age >= 18 else 'CHILD'
+            
             Member.objects.create(
                 user=user,
                 first_name=first_name,
                 last_name=last_name,
                 phone=phone,
                 gender=gender,
-                date_of_birth=datetime(random.randint(1980, 2005), random.randint(1, 12), random.randint(1, 28)).date(),
+                age_category=age_category,
+                date_of_birth=dob,
                 address=f'{random.randint(1, 100)} Demo Street',
                 activity_type=activity,
                 membership_plan=plan,
