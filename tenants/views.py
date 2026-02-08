@@ -33,19 +33,23 @@ class AdminResetDemoView(APIView):
         
         from django.core.management import call_command
         from io import StringIO
+        import traceback
         
         try:
             out = StringIO()
-            call_command('create_demo_gym', '--reset', stdout=out)
+            err = StringIO()
+            call_command('create_demo_gym', '--reset', stdout=out, stderr=err)
             output = out.getvalue()
+            errors = err.getvalue()
             return Response({
                 'status': 'success',
                 'message': 'Demo data reset to 120 members',
-                'output': output
+                'output': output,
+                'errors': errors
             })
         except Exception as e:
             return Response(
-                {'status': 'error', 'message': str(e)},
+                {'status': 'error', 'message': str(e), 'traceback': traceback.format_exc()},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
