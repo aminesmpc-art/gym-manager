@@ -225,44 +225,44 @@ should be the single source of truth for payment calculations.
 
 ---
 
-## Bug #6: Revenue Card Shows Wrong Number (Stale Data)
+## Bug #6: Revenue Card Data Scope Wrong
 **Date**: 2026-02-09
-**Status**: 🔴 FIXING
+**Status**: ✅ SOLVED
 
 ### Symptoms
-- Revenue Card shows 1070 DH "Revenus Collectés"
-- Should show TODAY's income only (daily reset)
-- Progress bar should compare today vs best day ever
+- Revenue Card showed **all-time** collected revenue for active members
+- Should show **THIS MONTH's** collected revenue
+- Progress bar had no meaningful comparison
 
-### Data Flow (Current → Desired)
+### Data Flow (Before → After)
 
 ```
-CURRENT (broken):                    DESIRED (fixed):
+BEFORE (broken):                     AFTER (fixed):
 ┌───────────────────┐               ┌───────────────────┐
 │  Revenue Card     │               │  Revenue Card     │
-│  1070 DH          │  ──────►      │  350 DH           │
-│  (all-time!)      │               │  (TODAY only!)     │
-│  Progress: ???    │               │  Bar: 350/1070=33% │
+│  1070 DH          │  ──────►      │  1070 DH          │
+│  (all-time sum!)  │               │  (THIS MONTH)     │
+│  Progress: ???    │               │  Bar: month/best   │
 └───────────────────┘               └───────────────────┘
 ```
 
 ### Root Cause
-`collected_revenue` in `reports/views.py` was summing ALL Payment records for active members, not just today's.
+`collected_revenue` in `reports/views.py` was summing ALL Payment records for active members instead of filtering by current month.
 
 ### Fix Applied
 ```python
 # Changed from:
-collected_revenue = Payment.objects.filter(member_id__in=ids).aggregate(...)
+collected_revenue = sum(Payment for ALL active members)  # all-time
 # Changed to:
-collected_revenue = float(income_today)  # Today's payments only
+collected_revenue = float(income_month)  # THIS MONTH's payments only
 ```
 
-Also added `highest_daily_income` for progress bar (best day ever comparison).
+Progress bar compares: `this month / best month ever`
 
 ### Status
-- ✅ Backend code fixed and pushed to Railway
-- ✅ Frontend updated to use `highestDailyIncome`
-- ⏳ Awaiting Railway deploy to verify
+- ✅ Backend: `collected_revenue = float(income_month)`
+- ✅ Frontend: progress bar uses `highestMonthlyIncome`
+- ✅ Deployed to Railway
 
 ---
 

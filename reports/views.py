@@ -475,17 +475,15 @@ class RevenueChartView(views.APIView):
                         payment_date=day,
                         member_id__in=active_member_ids
                     ).select_related('member')
-                    total_val = 0
-                    paid_val = 0
-                    unpaid_val = 0
+                    # All received payments = Paid (green bar)
+                    paid_val = sum(float(p.amount) for p in payments if p.amount)
+                    # Pending = outstanding debts of members who paid this period
+                    seen_members = {}
                     for p in payments:
-                        amt = float(p.amount) if p.amount else 0
-                        total_val += amt
-                        # Check if member still has debt
-                        if p.member and p.member.remaining_debt > 0:
-                            unpaid_val += amt
-                        else:
-                            paid_val += amt
+                        if p.member and p.member_id not in seen_members:
+                            seen_members[p.member_id] = float(p.member.remaining_debt)
+                    unpaid_val = sum(seen_members.values())
+                    total_val = paid_val + unpaid_val
                     values.append(total_val)
                     paid_values.append(paid_val)
                     unpaid_values.append(unpaid_val)
@@ -512,16 +510,15 @@ class RevenueChartView(views.APIView):
                         payment_date__lt=next_month,
                         member_id__in=active_member_ids
                     ).select_related('member')
-                    total_val = 0
-                    paid_val = 0
-                    unpaid_val = 0
+                    # All received payments = Paid (green bar)
+                    paid_val = sum(float(p.amount) for p in payments if p.amount)
+                    # Pending = outstanding debts of members who paid this period
+                    seen_members = {}
                     for p in payments:
-                        amt = float(p.amount) if p.amount else 0
-                        total_val += amt
-                        if p.member and p.member.remaining_debt > 0:
-                            unpaid_val += amt
-                        else:
-                            paid_val += amt
+                        if p.member and p.member_id not in seen_members:
+                            seen_members[p.member_id] = float(p.member.remaining_debt)
+                    unpaid_val = sum(seen_members.values())
+                    total_val = paid_val + unpaid_val
                     values.append(total_val)
                     paid_values.append(paid_val)
                     unpaid_values.append(unpaid_val)
@@ -557,16 +554,15 @@ class RevenueChartView(views.APIView):
                         payment_date__lte=week_end,
                         member_id__in=active_member_ids
                     ).select_related('member')
-                    total_val = 0
-                    paid_val = 0
-                    unpaid_val = 0
+                    # All received payments = Paid (green bar)
+                    paid_val = sum(float(p.amount) for p in payments if p.amount)
+                    # Pending = outstanding debts of members who paid this period
+                    seen_members = {}
                     for p in payments:
-                        amt = float(p.amount) if p.amount else 0
-                        total_val += amt
-                        if p.member and p.member.remaining_debt > 0:
-                            unpaid_val += amt
-                        else:
-                            paid_val += amt
+                        if p.member and p.member_id not in seen_members:
+                            seen_members[p.member_id] = float(p.member.remaining_debt)
+                    unpaid_val = sum(seen_members.values())
+                    total_val = paid_val + unpaid_val
                     values.append(total_val)
                     paid_values.append(paid_val)
                     unpaid_values.append(unpaid_val)

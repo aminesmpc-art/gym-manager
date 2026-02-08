@@ -158,10 +158,17 @@ class Member(models.Model):
     
     @property
     def remaining_debt(self):
-        """Calculate remaining debt (Plan Price - Amount Paid)."""
+        """Calculate remaining debt from Payment records (single source of truth)."""
         if not self.membership_plan:
             return 0
-        return max(0, self.membership_plan.price - self.amount_paid)
+        from subscriptions.models import Payment
+        from django.db.models import Sum
+        actual_paid = Payment.objects.filter(
+            member=self,
+            period_start=self.subscription_start,
+            period_end=self.subscription_end,
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        return max(0, self.membership_plan.price - actual_paid)
     
     @property
     def payment_status(self):
