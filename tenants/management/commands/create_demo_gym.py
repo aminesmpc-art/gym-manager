@@ -240,17 +240,23 @@ class Command(BaseCommand):
             num_records = random.randint(3, 10)
             for _ in range(num_records):
                 days_ago = random.randint(0, 30)
-                check_in = timezone.now() - timedelta(
-                    days=days_ago,
-                    hours=random.randint(6, 20),
-                    minutes=random.randint(0, 59)
-                )
-                check_out = check_in + timedelta(hours=random.randint(1, 2))
+                attendance_date = today - timedelta(days=days_ago)
+                check_in_hour = random.randint(6, 20)
+                check_in_minute = random.randint(0, 59)
+                
+                from datetime import time
+                check_in = time(check_in_hour, check_in_minute)
+                check_out = time(check_in_hour + random.randint(1, 2), check_in_minute)
                 
                 Attendance.objects.get_or_create(
                     member=member,
-                    check_in_time=check_in,
-                    defaults={'check_out_time': check_out}
+                    date=attendance_date,
+                    defaults={
+                        'check_in_time': check_in,
+                        'check_out_time': check_out,
+                        'checkin_result': 'allowed',
+                        'checkin_reason': 'ok',
+                    }
                 )
                 count += 1
         
