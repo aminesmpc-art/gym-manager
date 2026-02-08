@@ -417,25 +417,16 @@ Option B: Fix corrupted data + keep current property:
 python manage.py recalculate_payments  # Already created!
 ```
 
-**Chosen: Option A** — Make `remaining_debt` compute from Payment records. Self-healing, no more stale data.
+**Chosen: Keep `remaining_debt` using `amount_paid` field.**
 
-```python
-# APPLIED FIX in members/models.py:
-@property
-def remaining_debt(self):
-    from subscriptions.models import Payment
-    from django.db.models import Sum
-    actual_paid = Payment.objects.filter(
-        member=self,
-        period_start=self.subscription_start,
-        period_end=self.subscription_end,
-    ).aggregate(total=Sum('amount'))['total'] or 0
-    return max(0, self.membership_plan.price - actual_paid)
-```
+Why NOT Payment records: `perform_create` previously recorded full plan price (200 DH) instead of actual payment (150 DH), so old Payment records are corrupted. The `amount_paid` field is correct for existing members.
+
+Going forward: `perform_create` now records the actual user-entered payment amount, so both `amount_paid` AND Payment records will be correct for new members.
 
 ### Status
-- ✅ `remaining_debt` now computes from Payment records
-- ✅ All data sources (card, chart, badges) use same source of truth
+- ✅ `remaining_debt` uses `amount_paid` (correct for existing data)
+- ✅ `perform_create` fixed to record actual payment amount (correct for new data)
+- ✅ Verified: NIZAR shows 150/200 DH with 50 DH debt
 - ✅ Deployed to Railway
 
 ---
