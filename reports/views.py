@@ -128,25 +128,27 @@ class DashboardView(views.APIView):
             total_income = 0
             highest_monthly_income = 0
         
-        # 2b. Debt & Payment Tracking (using Payment records as single source of truth)
-        # This aligns with the Revenue Chart which also uses Payment records
+        # 2b. Debt & Payment Tracking (MONTHLY - using Payment records)
+        # Revenue card shows THIS MONTH's data only
         active_member_list = members.filter(subscription_end__gte=today)
         active_member_ids = list(active_member_list.values_list('id', flat=True))
         
-        # Calculate collected revenue from Payment records for active members
+        # Collected revenue THIS MONTH from Payment records
         collected_revenue = float(
             Payment.objects.filter(
-                member_id__in=active_member_ids
+                member_id__in=active_member_ids,
+                payment_date__gte=month_start,
+                payment_date__lte=today,
             ).aggregate(total=Sum('amount'))['total'] or 0
         )
         
-        # Calculate total expected revenue (sum of plan prices for active members)
+        # Total expected this month (plan prices of active members)
         total_expected = sum(
             float(m.membership_plan.price) if m.membership_plan else 0
             for m in active_member_list.select_related('membership_plan')
         )
         
-        # Total debt = expected - collected (never negative)
+        # Debt = expected - collected this month (never negative)
         total_debt = max(total_expected - collected_revenue, 0)
         
         # Count members with/without debt
