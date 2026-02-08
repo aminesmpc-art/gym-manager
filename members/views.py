@@ -325,8 +325,12 @@ class MemberViewSet(viewsets.ModelViewSet):
             )
         
         # Update Member subscription dates and save activity/plan changes
+        # Reset payment tracking for new renewal period
         member.subscription_start = start_date
         member.subscription_end = end_date
+        member.total_price = plan.price
+        member.amount_paid = amount if plan.price > 0 else 0
+        member.remaining_debt = max(0, plan.price - amount) if plan.price > 0 else 0
         member.save()
         
         return Response({

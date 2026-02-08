@@ -30,6 +30,7 @@
 |------|----------|----------|----------|
 | Super Admin | `public` | `admin` | `admin123` |
 | Demo Gym | `demo_gym` | `admin` | `admin123` |
+| LAACHIRI | `laachiri` | `laachiri_admin` | *use reset password* |
 
 ---
 
@@ -49,17 +50,15 @@ All plans have **unlimited members**.
 
 | Phase | Status | Features |
 |-------|--------|----------|
-| Phase 1: Foundation | ✅ DONE | Demographics fix, JWT login |
-| Phase 2: Super Admin API | ✅ DONE | Tenant CRUD, gym stats |
-| Phase 3: Gym Onboarding | ✅ DONE | Self-registration, admin creation |
-| Phase 4: Billing | ✅ DONE | Change Plan, cash-based workflow |
-| Phase 5: Customer Experience | ✅ DONE | Already exists in Gym App |
+| Phase 1-5 | ✅ DONE | All core features |
+| Password Management | ✅ DONE | Reset/Set admin passwords |
 | Phase 6: Production | ❌ Pending | Security, docs |
 
 ### 📍 WHERE WE ARE NOW:
-- ✅ **Create Gym** working (LAACHIRI created successfully!)
-- ✅ **DEBUG.md** tracks all bugs & solutions
-- ⏭️ Next: Approve gym → Test gym login → Phase 6
+- ✅ **Create Gym** working
+- ✅ **Password Management** - Reset Password, Set Custom Password
+- ✅ **Credentials shown on approve**
+- ⏭️ Next: Phase 6 (Security & Docs)
 
 ---
 
@@ -68,24 +67,23 @@ All plans have **unlimited members**.
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/auth/login/` | POST | Login (needs gym_slug) |
-| `/api/tenants/admin/reset-demo/?secret=gym_reset_2026` | POST | Reset demo to 120 members |
 | `/api/tenants/` | GET/POST | List/Create gyms |
 | `/api/tenants/{id}/` | PATCH | Update gym (change plan) |
-| `/api/users/change_password/` | POST | Change user password |
+| `/api/tenants/{id}/approve/` | POST | Approve pending gym |
+| `/api/tenants/{id}/reset-password/` | POST | Reset admin password |
+| `/api/tenants/{id}/set-password/` | POST | Set custom password |
+| `/api/users/change_password/` | POST | Change user's own password |
 
 ---
 
-## 📁 Key Features in Gym App (Settings)
+## 📁 Super Admin Features
 
-### Account Settings:
-- ✅ Change Password
-- ✅ Session Management
-- ✅ Permissions View
-
-### Data Export:
-- ✅ Export Members CSV
-- ✅ Export Attendance CSV
-- ✅ Export Staff CSV
+- ✅ Create Gym (auto-generates schema)
+- ✅ Approve Gym (shows credentials)
+- ✅ Suspend/Reactivate Gym
+- ✅ Change Plan (Trial/Pro/Lifetime)
+- ✅ Reset Admin Password (🔑 key icon)
+- ✅ Set Custom Admin Password
 
 ---
 
@@ -96,20 +94,20 @@ All plans have **unlimited members**.
 cd "C:\Users\HP PROBOOK\Desktop\Flutter GYM\app" && flutter run -d chrome
 
 # Run Super Admin
-cd C:\Users\HP PROBOOK\Desktop\super_admin && flutter run -d chrome
+cd C:\Users\HP PROBOOK\Desktop\super_admin && flutter run -d windows
 
-# Reset Demo Data
-POST /api/tenants/admin/reset-demo/?secret=gym_reset_2026
+# Run Super Admin (Web)
+cd C:\Users\HP PROBOOK\Desktop\super_admin && flutter run -d chrome
 ```
 
 ---
 
 ## 🐛 Bug Tracking
 
-All bugs and their solutions are documented in **`DEBUG.md`**.
+All bugs and solutions documented in **`DEBUG.md`**.
 
-> **Always check DEBUG.md** when encountering errors - the solution might already be there!
+> Check DEBUG.md when encountering errors!
 
 ---
 
-*Last Updated: 2026-02-08 18:54*
+*Last Updated: 2026-02-08 21:38*
