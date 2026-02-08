@@ -229,6 +229,83 @@ class GymViewSet(viewsets.ModelViewSet):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    @action(detail=True, methods=['post'], url_path='reset-password')
+    def reset_admin_password(self, request, pk=None):
+        """Reset the admin password for an approved gym. Returns new random password."""
+        from users.models import User
+        from django.utils.crypto import get_random_string
+        from django_tenants.utils import schema_context
+        
+        gym = self.get_object()
+        username = f'{gym.slug}_admin'
+        new_password = get_random_string(12)
+        
+        try:
+            with schema_context(gym.schema_name):
+                user = User.objects.filter(username=username).first()
+                if user:
+                    user.set_password(new_password)
+                    user.save()
+                    return Response({
+                        'status': 'success',
+                        'message': 'Password reset successfully',
+                        'credentials': {
+                            'username': username,
+                            'password': new_password,
+                            'email': user.email,
+                        }
+                    })
+                else:
+                    return Response(
+                        {'error': f'Admin user {username} not found'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=['post'], url_path='set-password')
+    def set_admin_password(self, request, pk=None):
+        """Set a custom password for the gym admin."""
+        from users.models import User
+        from django_tenants.utils import schema_context
+        
+        gym = self.get_object()
+        username = f'{gym.slug}_admin'
+        new_password = request.data.get('password')
+        
+        if not new_password or len(new_password) < 6:
+            return Response(
+                {'error': 'Password must be at least 6 characters'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            with schema_context(gym.schema_name):
+                user = User.objects.filter(username=username).first()
+                if user:
+                    user.set_password(new_password)
+                    user.save()
+                    return Response({
+                        'status': 'success',
+                        'message': 'Password updated successfully',
+                        'credentials': {
+                            'username': username,
+                            'email': user.email,
+                        }
+                    })
+                else:
+                    return Response(
+                        {'error': f'Admin user {username} not found'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     @action(detail=False, methods=['post'], url_path='reset-demo')
     def reset_demo(self, request):
         """Reset demo gym data to exactly 120 members. Super Admin only."""

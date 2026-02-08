@@ -6,25 +6,41 @@
 
 ## Bug #1: Create Gym Returns 500 Server Error
 **Date**: 2026-02-08
-**Status**: 🔄 IN PROGRESS
+**Status**: ✅ SOLVED
 
 ### Symptoms
 - Super Admin app → Create New Gym → Click "Create Gym"
-- Returns: `Server Error (500)`
-- No specific error message
+- Returns: `Server Error (500)` then `"Invalid string used for the schema name."`
 
 ### Investigation
-1. Frontend sends POST to `/api/tenants/` with:
-   - `name`, `slug`, `schema_name`, `owner_name`, `owner_email`, `owner_phone`
-2. Backend `GymViewSet` uses `ModelViewSet.create()`
-3. `django-tenants` should auto-create schema when Gym.save() is called
-4. **500 error** = something crashes in the backend during gym creation
+1. Frontend sends POST to `/api/tenants/` with data
+2. `GymSerializer` had `schema_name` in `read_only_fields`
+3. Frontend's `schema_name` value was ignored
+4. Django-tenants requires valid `schema_name` but it was empty/None
+5. This caused the "Invalid string" validation error
 
 ### Root Cause
-- TODO: Check backend for actual error
+**`schema_name` was `read_only` but never auto-generated in the serializer!**
+
+Django-tenants validates schema names strictly:
+- Must be lowercase alphanumeric + underscores only
+- Cannot start with a number
+- Cannot be empty
 
 ### Solution
-- TODO: Add traceback logging to GymViewSet.create()
+Added `create()` method to `GymSerializer` in `tenants/serializers.py`:
+```python
+def create(self, validated_data):
+    import re
+    slug = validated_data.get('slug', '')
+    # Convert slug to valid PostgreSQL schema name
+    schema_name = slug.replace('-', '_')
+    schema_name = re.sub(r'[^a-z0-9_]', '', schema_name.lower())
+    if schema_name and schema_name[0].isdigit():
+        schema_name = 'gym_' + schema_name
+    validated_data['schema_name'] = schema_name
+    return super().create(validated_data)
+```
 
 ---
 
