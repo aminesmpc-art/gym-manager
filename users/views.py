@@ -3,6 +3,9 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework import serializers
+from django.contrib.auth import authenticate
+from django_tenants.utils import schema_context
 from .models import User, StaffPayment
 from .serializers import (
     UserSerializer, UserCreateSerializer, UserUpdateSerializer,
@@ -13,17 +16,21 @@ from .serializers import (
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     """
-    Custom JWT serializer to include user role and basic info in the token payload.
+    Custom JWT serializer with multi-tenant gym_slug support.
+    Accepts gym_slug to authenticate users within a specific gym's schema.
     """
     
+    gym_slug = serializers.CharField(required=False, default='public', write_only=True)
+    
     @classmethod
-    def get_token(cls, user):
+    def get_token(cls, user, gym_slug='public'):
         token = super().get_token(user)
 
         # Add custom claims
         token['role'] = user.role
         token['username'] = user.username
         token['allowed_gender'] = user.allowed_gender
+        token['gym_slug'] = gym_slug  # Store gym_slug in token
         
         # Add basic profile info if it exists
         if hasattr(user, 'first_name') and user.first_name:
@@ -35,19 +42,50 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
-        data = super().validate(attrs)
+        gym_slug = attrs.pop('gym_slug', 'public')
+        username = attrs.get('username')
+        password = attrs.get('password')
         
-        # Also add role and allowed_gender to the response body for convenience
-        data['role'] = self.user.role
-        data['username'] = self.user.username
-        data['allowed_gender'] = self.user.allowed_gender
+        # Validate gym_slug exists
+        from tenants.models import Gym
+        try:
+            with schema_context('public'):
+                gym = Gym.objects.get(schema_name=gym_slug)
+                if gym.status != 'approved':
+                    raise serializers.ValidationError({'gym_slug': 'This gym is not active.'})
+        except Gym.DoesNotExist:
+            raise serializers.ValidationError({'gym_slug': 'Invalid gym code.'})
+        
+        # Authenticate within the tenant schema
+        with schema_context(gym_slug):
+            user = authenticate(username=username, password=password)
+            if user is None:
+                raise serializers.ValidationError({'detail': 'Invalid username or password.'})
+            if not user.is_active:
+                raise serializers.ValidationError({'detail': 'User account is disabled.'})
+            
+            self.user = user
+            
+            # Generate tokens
+            refresh = self.get_token(user, gym_slug)
+            
+            data = {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'role': user.role,
+                'username': user.username,
+                'allowed_gender': user.allowed_gender,
+                'gym_slug': gym_slug,
+                'gym_name': gym.name,
+            }
         
         return data
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """
-    Custom view for login to use our custom serializer.
+    Custom view for login with multi-tenant gym_slug support.
+    
     """
     serializer_class = CustomTokenObtainPairSerializer
 
