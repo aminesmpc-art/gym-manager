@@ -120,36 +120,45 @@ class DashboardView(views.APIView):
             
             highest_monthly_income = highest_month['total'] if highest_month else 0
             if highest_monthly_income < income_month:
-                highest_monthly_income = income_month # Handle edge case where current incomplete month is already the highest
+                highest_monthly_income = income_month
+            
+            # Calculate highest daily income (best day ever) for revenue card progress bar
+            from django.db.models.functions import TruncDate
+            highest_day_income = Payment.objects.annotate(
+                day=TruncDate('payment_date')
+            ).values('day').annotate(
+                total=Sum('amount')
+            ).order_by('-total').first()
+            
+            highest_daily_income = float(highest_day_income['total']) if highest_day_income else 0
+            if highest_daily_income < float(income_today):
+                highest_daily_income = float(income_today)
         else:
             # Staff cannot see financials
             income_today = 0
             income_month = 0
             total_income = 0
             highest_monthly_income = 0
+            highest_daily_income = 0
         
-        # 2b. Debt & Payment Tracking (MONTHLY - using Payment records)
-        # Revenue card shows THIS MONTH's data only
+        # 2b. Debt & Payment Tracking
         active_member_list = members.filter(subscription_end__gte=today)
         active_member_ids = list(active_member_list.values_list('id', flat=True))
         
-        # Collected revenue THIS MONTH from Payment records
-        collected_revenue = float(
-            Payment.objects.filter(
-                member_id__in=active_member_ids,
-                payment_date__gte=month_start,
-                payment_date__lte=today,
-            ).aggregate(total=Sum('amount'))['total'] or 0
-        )
+        # Revenue card shows TODAY's collected revenue
+        collected_revenue = float(income_today)
         
-        # Total expected this month (plan prices of active members)
+        # Total debt = sum of remaining_debt for all active members
         total_expected = sum(
             float(m.membership_plan.price) if m.membership_plan else 0
             for m in active_member_list.select_related('membership_plan')
         )
-        
-        # Debt = expected - collected this month (never negative)
-        total_debt = max(total_expected - collected_revenue, 0)
+        total_paid_all = float(
+            Payment.objects.filter(
+                member_id__in=active_member_ids
+            ).aggregate(total=Sum('amount'))['total'] or 0
+        )
+        total_debt = max(total_expected - total_paid_all, 0)
         
         # Count members with/without debt
         members_with_debt = 0
@@ -404,6 +413,7 @@ class DashboardView(views.APIView):
                 'income_this_month': income_month,
                 'total_income': total_income,
                 'highest_monthly_income': highest_monthly_income,
+                'highest_daily_income': highest_daily_income if user.is_admin else 0,
                 'currency': 'DH'
             },
             'debt': {
