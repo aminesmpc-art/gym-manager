@@ -123,6 +123,20 @@ class GymViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(status=status_filter)
         return queryset.order_by('-created_at')
 
+    def create(self, request, *args, **kwargs):
+        """Create a new gym with proper error handling."""
+        import traceback
+        try:
+            print(f"[GymViewSet] Creating gym with data: {request.data}")
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            print(f"[GymViewSet] Error creating gym: {e}")
+            print(f"[GymViewSet] Traceback: {traceback.format_exc()}")
+            return Response(
+                {'error': str(e), 'traceback': traceback.format_exc()},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         """Approve a pending gym application."""
