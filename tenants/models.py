@@ -19,15 +19,13 @@ class Gym(TenantMixin):
         SUSPENDED = 'suspended', 'Suspended'
     
     class SubscriptionPlan(models.TextChoices):
-        FREE_TRIAL = 'free_trial', 'Free Trial (14 days)'
-        BASIC = 'basic', 'Basic - 200 DH/mo'
-        PRO = 'pro', 'Pro - 500 DH/mo'
-        ENTERPRISE = 'enterprise', 'Enterprise - Custom'
+        TRIAL = 'trial', 'Trial (14 days)'
+        PRO = 'pro', 'Pro - 200 DH/month'
+        LIFETIME = 'lifetime', 'Lifetime - 2000 DH'
     
     class SubscriptionStatus(models.TextChoices):
         ACTIVE = 'active', 'Active'
-        PAST_DUE = 'past_due', 'Past Due'
-        CANCELLED = 'cancelled', 'Cancelled'
+        EXPIRED = 'expired', 'Expired'
         TRIAL = 'trial', 'Trial'
     
     # Gym details
@@ -44,11 +42,11 @@ class Gym(TenantMixin):
         default=Status.PENDING
     )
     
-    # Subscription / Billing
+    # Subscription / Billing (Cash-based)
     subscription_plan = models.CharField(
         max_length=20,
         choices=SubscriptionPlan.choices,
-        default=SubscriptionPlan.FREE_TRIAL
+        default=SubscriptionPlan.TRIAL
     )
     subscription_status = models.CharField(
         max_length=20,
@@ -56,7 +54,7 @@ class Gym(TenantMixin):
         default=SubscriptionStatus.TRIAL
     )
     subscription_start = models.DateField(null=True, blank=True)
-    subscription_end = models.DateField(null=True, blank=True)
+    subscription_end = models.DateField(null=True, blank=True)  # Null for lifetime
     
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
@@ -78,13 +76,25 @@ class Gym(TenantMixin):
     @property
     def member_limit(self):
         """Return member limit based on subscription plan."""
-        limits = {
-            'free_trial': 50,
-            'basic': 100,
-            'pro': 500,
-            'enterprise': None,  # Unlimited
-        }
-        return limits.get(self.subscription_plan)
+        # All plans have unlimited members
+        return None
+    
+    @property
+    def is_lifetime(self):
+        """Check if gym has lifetime subscription."""
+        return self.subscription_plan == 'lifetime'
+    
+    @property
+    def is_subscription_active(self):
+        """Check if subscription is valid."""
+        if self.subscription_status != 'active':
+            return False
+        if self.is_lifetime:
+            return True  # Lifetime never expires
+        if self.subscription_end:
+            from django.utils import timezone
+            return self.subscription_end >= timezone.now().date()
+        return False
 
 
 class Domain(DomainMixin):
