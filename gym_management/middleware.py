@@ -120,19 +120,22 @@ class JWTTenantMiddleware:
         gym_slug = self._get_gym_slug_from_token(request)
         
         if gym_slug and gym_slug != 'public':
-            # Switch to tenant schema for this request
-            from django_tenants.utils import schema_context
             from django.db import connection
+            from django_tenants.utils import schema_context
             
+            # First verify tenant exists (in public schema)
+            tenant_exists = False
             try:
-                # Verify tenant exists
                 from tenants.models import Gym
                 with schema_context('public'):
-                    if Gym.objects.filter(schema_name=gym_slug).exists():
-                        # Set the schema for this connection
-                        connection.set_schema(gym_slug)
+                    tenant_exists = Gym.objects.filter(schema_name=gym_slug).exists()
             except Exception as e:
-                print(f"[JWTTenantMiddleware] Failed to switch schema: {e}")
+                print(f"[JWTTenantMiddleware] Failed to check tenant: {e}")
+            
+            # If tenant exists, switch to that schema for this request
+            if tenant_exists:
+                print(f"[JWTTenantMiddleware] Switching to schema: {gym_slug}")
+                connection.set_schema(gym_slug)
         
         return self.get_response(request)
     
@@ -148,6 +151,7 @@ class JWTTenantMiddleware:
         try:
             # Decode without verification to read claims
             # The token was already verified by SimpleJWT authentication
+            import jwt
             decoded = jwt.decode(
                 token,
                 options={"verify_signature": False}
@@ -156,4 +160,5 @@ class JWTTenantMiddleware:
         except Exception as e:
             print(f"[JWTTenantMiddleware] Failed to decode token: {e}")
             return None
+
 
