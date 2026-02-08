@@ -261,20 +261,29 @@ class Command(BaseCommand):
         self.stdout.write('Creating payment records...')
         members_with_subscription = Member.objects.filter(
             subscription_start__isnull=False,
+            subscription_end__isnull=False,
+            membership_plan__isnull=False,
             amount_paid__gt=0
         )
         
         count = 0
         for member in members_with_subscription:
-            Payment.objects.get_or_create(
-                member=member,
-                date=member.subscription_start,
-                defaults={
-                    'amount': member.amount_paid,
-                    'payment_method': random.choice(['cash', 'card', 'transfer']),
-                    'notes': f'Subscription payment for {member.membership_plan.name if member.membership_plan else "N/A"}',
-                }
-            )
-            count += 1
+            try:
+                Payment.objects.get_or_create(
+                    member=member,
+                    payment_date=member.subscription_start,
+                    defaults={
+                        'membership_plan': member.membership_plan,
+                        'amount': member.amount_paid,
+                        'payment_method': random.choice(['CASH', 'CARD', 'TRANSFER']),
+                        'period_start': member.subscription_start,
+                        'period_end': member.subscription_end,
+                        'notes': f'Subscription payment for {member.membership_plan.name}',
+                    }
+                )
+                count += 1
+            except Exception as e:
+                self.stdout.write(f'  Error creating payment for {member}: {e}')
         
         self.stdout.write(f'  Created {count} payment records')
+
