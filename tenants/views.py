@@ -15,6 +15,41 @@ from tenants.models import Gym, Domain
 from .serializers import GymSerializer, GymRegistrationSerializer
 
 
+class AdminResetDemoView(APIView):
+    """
+    Reset demo gym data. Uses a secret key instead of login.
+    Usage: POST /api/admin/reset-demo/?secret=gym_reset_2026
+    """
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        # Simple secret key check
+        secret = request.query_params.get('secret')
+        if secret != 'gym_reset_2026':
+            return Response(
+                {'error': 'Invalid secret key'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        from django.core.management import call_command
+        from io import StringIO
+        
+        try:
+            out = StringIO()
+            call_command('create_demo_gym', '--reset', stdout=out)
+            output = out.getvalue()
+            return Response({
+                'status': 'success',
+                'message': 'Demo data reset to 120 members',
+                'output': output
+            })
+        except Exception as e:
+            return Response(
+                {'status': 'error', 'message': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
 class GymViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing gym tenants.
