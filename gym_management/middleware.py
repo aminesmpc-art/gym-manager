@@ -1,9 +1,11 @@
 """
 Custom middleware for Railway deployment.
-Handles health checks, auto-creates public tenant, and creates superuser if missing.
+Handles health checks, auto-creates public tenant, creates superuser, and JWT-based tenant routing.
 """
 import os
+import jwt
 from django.http import JsonResponse
+from django.conf import settings
 
 
 class HealthCheckMiddleware:
@@ -96,3 +98,62 @@ class HealthCheckMiddleware:
                     
         except Exception as e:
             print(f"[Middleware] Superuser creation skipped: {e}")
+
+
+class JWTTenantMiddleware:
+    """
+    Middleware that reads gym_slug from JWT token and switches to the correct tenant schema.
+    This enables multi-tenant SaaS where the gym app sends gym_slug in the JWT token.
+    
+    MUST be placed AFTER AuthenticationMiddleware in settings.MIDDLEWARE.
+    """
+    
+    def __init__(self, get_response):
+        self.get_response = get_response
+    
+    def __call__(self, request):
+        # Skip for unauthenticated endpoints
+        if request.path in ['/health/', '/health', '/api/auth/login/', '/api/auth/register/']:
+            return self.get_response(request)
+        
+        # Try to get gym_slug from JWT token
+        gym_slug = self._get_gym_slug_from_token(request)
+        
+        if gym_slug and gym_slug != 'public':
+            # Switch to tenant schema for this request
+            from django_tenants.utils import schema_context
+            from django.db import connection
+            
+            try:
+                # Verify tenant exists
+                from tenants.models import Gym
+                with schema_context('public'):
+                    if Gym.objects.filter(schema_name=gym_slug).exists():
+                        # Set the schema for this connection
+                        connection.set_schema(gym_slug)
+            except Exception as e:
+                print(f"[JWTTenantMiddleware] Failed to switch schema: {e}")
+        
+        return self.get_response(request)
+    
+    def _get_gym_slug_from_token(self, request):
+        """Extract gym_slug from Authorization header JWT token."""
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        
+        if not auth_header.startswith('Bearer '):
+            return None
+        
+        token = auth_header[7:]  # Remove 'Bearer ' prefix
+        
+        try:
+            # Decode without verification to read claims
+            # The token was already verified by SimpleJWT authentication
+            decoded = jwt.decode(
+                token,
+                options={"verify_signature": False}
+            )
+            return decoded.get('gym_slug', 'public')
+        except Exception as e:
+            print(f"[JWTTenantMiddleware] Failed to decode token: {e}")
+            return None
+
