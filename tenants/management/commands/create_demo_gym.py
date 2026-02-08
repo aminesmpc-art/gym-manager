@@ -68,6 +68,23 @@ class Command(BaseCommand):
             from attendance.models import Attendance
             from users.models import User
             
+            # Create admin user for this tenant
+            admin, admin_created = User.objects.get_or_create(
+                username='admin',
+                defaults={
+                    'email': 'admin@fitzone.com',
+                    'first_name': 'Demo',
+                    'last_name': 'Admin',
+                    'role': 'ADMIN',
+                    'is_staff': True,
+                    'is_active': True,
+                }
+            )
+            if admin_created:
+                admin.set_password('admin123')
+                admin.save()
+                self.stdout.write(self.style.SUCCESS('Created admin user: admin / admin123'))
+            
             self._create_activity_types(ActivityType)
             self._create_plans(MembershipPlan, ActivityType)
             self._create_members(Member, MembershipPlan, ActivityType, User, num_members)
