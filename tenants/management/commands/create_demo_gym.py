@@ -41,11 +41,11 @@ class Command(BaseCommand):
                 schema_name=schema_name,
                 defaults={
                     'name': gym_name,
+                    'slug': 'fitzone-demo',
                     'owner_name': 'Demo Owner',
                     'owner_email': 'demo@fitzone.com',
-                    'phone': '+212600000000',
-                    'address': '123 Demo Street, Casablanca',
-                    'status': 'APPROVED',
+                    'owner_phone': '+212600000000',
+                    'status': 'approved',
                 }
             )
             
