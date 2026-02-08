@@ -66,10 +66,11 @@ class Command(BaseCommand):
             from gym.models import ActivityType, MembershipPlan
             from members.models import Member
             from attendance.models import Attendance
+            from users.models import User
             
             self._create_activity_types(ActivityType)
             self._create_plans(MembershipPlan, ActivityType)
-            self._create_members(Member, MembershipPlan, num_members)
+            self._create_members(Member, MembershipPlan, ActivityType, User, num_members)
             self._create_attendance(Attendance, Member)
         
         self.stdout.write(self.style.SUCCESS(f'Demo gym "{gym_name}" created with {num_members} members!'))
@@ -111,53 +112,73 @@ class Command(BaseCommand):
                 )
         self.stdout.write(f'  Created {len(plans) * len(activities)} plans')
 
-    def _create_members(self, Member, MembershipPlan, num_members):
+    def _create_members(self, Member, MembershipPlan, ActivityType, User, num_members):
         self.stdout.write(f'Creating {num_members} demo members...')
         plans = list(MembershipPlan.objects.filter(is_active=True))
+        activities = list(ActivityType.objects.all())
         
+        created_count = 0
         for i in range(num_members):
             gender = random.choice(['M', 'F'])
             first_name = random.choice(FIRST_NAMES_M if gender == 'M' else FIRST_NAMES_F)
             last_name = random.choice(LAST_NAMES)
             phone = f'+2126{random.randint(10000000, 99999999)}'
+            username = f'demo_{i}_{random.randint(1000, 9999)}'
+            email = f'{username}@demo.com'
+            
+            # Create user first
+            user, user_created = User.objects.get_or_create(
+                username=username,
+                defaults={
+                    'email': email,
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'role': 'MEMBER',
+                    'is_active': True,
+                }
+            )
+            
+            if not user_created:
+                continue  # Skip if user exists (shouldn't happen with random usernames)
+            
+            user.set_password('demo123')
+            user.save()
             
             # Random subscription status weights: 70% active, 20% expired, 10% pending
             status_type = random.choices(['active', 'expired', 'pending'], weights=[70, 20, 10])[0]
+            plan = random.choice(plans)
+            activity = plan.activity_type  # Use the plan's activity type
             
             if status_type == 'active':
                 start_date = timezone.now().date() - timedelta(days=random.randint(1, 30))
-                plan = random.choice(plans)
                 end_date = start_date + timedelta(days=plan.duration_days)
                 amount_paid = plan.price
             elif status_type == 'expired':
-                plan = random.choice(plans)
                 end_date = timezone.now().date() - timedelta(days=random.randint(1, 60))
                 start_date = end_date - timedelta(days=plan.duration_days)
                 amount_paid = plan.price
             else:  # pending - no subscription dates
-                plan = random.choice(plans)
                 start_date = None
                 end_date = None
                 amount_paid = Decimal('0')
             
-            member, created = Member.objects.update_or_create(
+            Member.objects.create(
+                user=user,
+                first_name=first_name,
+                last_name=last_name,
                 phone=phone,
-                defaults={
-                    'first_name': first_name,
-                    'last_name': last_name,
-                    'email': f'{first_name.lower()}.{last_name.lower().replace(" ", "")}@demo.com',
-                    'gender': gender,
-                    'date_of_birth': datetime(random.randint(1980, 2005), random.randint(1, 12), random.randint(1, 28)).date(),
-                    'address': f'{random.randint(1, 100)} Demo Street',
-                    'emergency_contact': f'+2126{random.randint(10000000, 99999999)}',
-                    'membership_plan': plan,
-                    'subscription_start': start_date,
-                    'subscription_end': end_date,
-                    'amount_paid': amount_paid,
-                }
+                gender=gender,
+                date_of_birth=datetime(random.randint(1980, 2005), random.randint(1, 12), random.randint(1, 28)).date(),
+                address=f'{random.randint(1, 100)} Demo Street',
+                activity_type=activity,
+                membership_plan=plan,
+                subscription_start=start_date,
+                subscription_end=end_date,
+                amount_paid=amount_paid,
             )
+            created_count += 1
         
-        self.stdout.write(f'  Created {num_members} members')
+        self.stdout.write(f'  Created {created_count} members')
 
     def _create_attendance(self, Attendance, Member):
         self.stdout.write('Creating attendance records...')
