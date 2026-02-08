@@ -229,6 +229,12 @@ class MemberViewSet(viewsets.ModelViewSet):
             from subscriptions.models import Payment
             from django.utils import timezone
             
+            # IMPORTANT: Reset amount_paid BEFORE creating Payment
+            # Payment.save() will set it to the correct value
+            # This prevents doubling when frontend sends amount_paid
+            member.amount_paid = 0
+            member.save(update_fields=['amount_paid'])
+            
             Payment.objects.create(
                 member=member,
                 membership_plan=membership_plan,
