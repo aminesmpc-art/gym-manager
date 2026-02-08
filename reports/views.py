@@ -128,13 +128,43 @@ class DashboardView(views.APIView):
             total_income = 0
             highest_monthly_income = 0
         
-        # 2b. Debt & Payment Tracking (for dashboard upgrade)
-        # Calculate total debt across all active members
+        # 2b. Debt & Payment Tracking (using Payment records as single source of truth)
+        # This aligns with the Revenue Chart which also uses Payment records
         active_member_list = members.filter(subscription_end__gte=today)
-        total_debt = sum(m.remaining_debt for m in active_member_list)
-        collected_revenue = sum(float(m.amount_paid) for m in active_member_list)
-        members_with_debt = sum(1 for m in active_member_list if m.remaining_debt > 0)
-        paid_members_count = sum(1 for m in active_member_list if m.remaining_debt == 0)
+        active_member_ids = list(active_member_list.values_list('id', flat=True))
+        
+        # Calculate collected revenue from Payment records for active members
+        collected_revenue = float(
+            Payment.objects.filter(
+                member_id__in=active_member_ids
+            ).aggregate(total=Sum('amount'))['total'] or 0
+        )
+        
+        # Calculate total expected revenue (sum of plan prices for active members)
+        total_expected = sum(
+            float(m.membership_plan.price) if m.membership_plan else 0
+            for m in active_member_list.select_related('membership_plan')
+        )
+        
+        # Total debt = expected - collected (never negative)
+        total_debt = max(total_expected - collected_revenue, 0)
+        
+        # Count members with/without debt
+        members_with_debt = 0
+        paid_members_count = 0
+        for m in active_member_list:
+            plan_price = float(m.membership_plan.price) if m.membership_plan else 0
+            member_payments = float(
+                Payment.objects.filter(
+                    member=m,
+                    period_start=m.subscription_start,
+                    period_end=m.subscription_end,
+                ).aggregate(total=Sum('amount'))['total'] or 0
+            )
+            if member_payments >= plan_price:
+                paid_members_count += 1
+            else:
+                members_with_debt += 1
         
         # 2c. Insurance Tracking
         insurance_paid_count = members.filter(insurance_paid=True).count()
