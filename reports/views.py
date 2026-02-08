@@ -145,8 +145,8 @@ class DashboardView(views.APIView):
         active_member_list = members.filter(subscription_end__gte=today)
         active_member_ids = list(active_member_list.values_list('id', flat=True))
         
-        # Revenue card shows TODAY's collected revenue
-        collected_revenue = float(income_today)
+        # Revenue card shows THIS MONTH's collected revenue
+        collected_revenue = float(income_month)
         
         # Total debt = sum of remaining_debt for all active members
         total_expected = sum(

@@ -221,5 +221,198 @@ should be the single source of truth for payment calculations.
 
 ---
 
-*Last Updated: 2026-02-08*
+*Last Updated: 2026-02-09*
 
+---
+
+## Bug #6: Revenue Card Shows Wrong Number (Stale Data)
+**Date**: 2026-02-09
+**Status**: 🔴 FIXING
+
+### Symptoms
+- Revenue Card shows 1070 DH "Revenus Collectés"
+- Should show TODAY's income only (daily reset)
+- Progress bar should compare today vs best day ever
+
+### Data Flow (Current → Desired)
+
+```
+CURRENT (broken):                    DESIRED (fixed):
+┌───────────────────┐               ┌───────────────────┐
+│  Revenue Card     │               │  Revenue Card     │
+│  1070 DH          │  ──────►      │  350 DH           │
+│  (all-time!)      │               │  (TODAY only!)     │
+│  Progress: ???    │               │  Bar: 350/1070=33% │
+└───────────────────┘               └───────────────────┘
+```
+
+### Root Cause
+`collected_revenue` in `reports/views.py` was summing ALL Payment records for active members, not just today's.
+
+### Fix Applied
+```python
+# Changed from:
+collected_revenue = Payment.objects.filter(member_id__in=ids).aggregate(...)
+# Changed to:
+collected_revenue = float(income_today)  # Today's payments only
+```
+
+Also added `highest_daily_income` for progress bar (best day ever comparison).
+
+### Status
+- ✅ Backend code fixed and pushed to Railway
+- ✅ Frontend updated to use `highestDailyIncome`
+- ⏳ Awaiting Railway deploy to verify
+
+---
+
+## Bug #7: Chart Paid/Pending Classification is WRONG 🔴
+**Date**: 2026-02-09
+**Status**: 🔴 TO FIX
+
+### Symptoms
+- Chart tooltip shows: **Paid: 750 DH, Pending: 320 DH**
+- But actual member debts total only **130 DH** (HODAYFA 80 + NIZAR 50)
+- Where does 320 DH "Pending" come from?
+
+### Investigation
+
+#### Step 1: Trace the Chart Logic
+**File**: `reports/views.py`, `RevenueChartView`, lines 481-488:
+
+```python
+for p in payments:
+    amt = float(p.amount)
+    # Check if member CURRENTLY has debt
+    if p.member and p.member.remaining_debt > 0:
+        unpaid_val += amt    # ALL of this member's payment → Pending!
+    else:
+        paid_val += amt      # ALL of this member's payment → Paid!
+```
+
+#### Step 2: The Smoking Gun 🔫
+
+The logic asks: "Does this member have ANY remaining debt?"
+- If YES → **entire payment amount** goes to "Pending"
+- If NO → **entire payment amount** goes to "Paid"
+
+**This is WRONG.** Here's why:
+
+```
+HODAYFA: Plan = 200 DH, Paid 120 DH, Owes 80 DH
+├── Payment #1: 120 DH
+└── remaining_debt > 0 → Chart marks 120 DH as "Pending" ❌
+
+Reality: 120 DH was ACTUALLY RECEIVED → should be "Paid"
+         Only 80 DH is truly "Pending" (not yet received)
+```
+
+#### Step 3: Math Proof
+
+```
+Members and payments:
+┌─────────────┬──────────┬──────────┬────────┬──────────────────┐
+│ Member      │ Plan     │ Paid     │ Debt   │ Chart says...    │
+├─────────────┼──────────┼──────────┼────────┼──────────────────┤
+│ HODAYFA     │ 200 DH   │ 120 DH   │ 80 DH  │ 120 = Pending ❌ │
+│ NIZAR       │ 200 DH   │ 150 DH   │ 50 DH  │ 150 = Pending ❌ │
+│ KARIMA      │ 200 DH   │ 200 DH   │ 0 DH   │ 200 = Paid ✅    │
+│ Others      │ various  │ 550 DH   │ 0 DH   │ 550 = Paid ✅    │
+├─────────────┼──────────┼──────────┼────────┼──────────────────┤
+│ TOTAL       │          │ 1020 DH  │ 130 DH │ Paid: 750        │
+│             │          │          │        │ Pending: 270     │
+└─────────────┴──────────┴──────────┴────────┴──────────────────┘
+
+Chart says:   Paid=750, Pending=320 (off because stale amount_paid)
+Should say:   Paid=1020, Pending=130 (actual money received vs owed)
+```
+
+### Root Cause
+
+**The chart conflates "received money" with "member debt status".**
+
+A payment that was already received and is sitting in the cash register should ALWAYS be "Paid". "Pending" should only show money that has NOT been received yet (i.e., outstanding debt).
+
+### Proposed Fix
+
+Change the chart to show:
+- **Paid (green bar)** = Sum of actual Payment records (money received)
+- **Pending (pink bar)** = Sum of remaining debts (money NOT yet received)
+
+```python
+# NEW LOGIC:
+for day in period:
+    payments = Payment.objects.filter(payment_date=day, ...)
+    paid_val = sum(p.amount for p in payments)  # All received = Paid
+    
+    # Pending = total debts of members who had payments this day
+    members_this_day = set(p.member for p in payments)
+    unpaid_val = sum(m.remaining_debt for m in members_this_day)
+```
+
+---
+
+## Bug #8: Debt Numbers Differ Between Card and Member Badges 🔴
+**Date**: 2026-02-09
+**Status**: 🔴 TO FIX
+
+### Symptoms
+- Revenue Card debt: **80 DH**
+- Member badge debts: **80 DH (HODAYFA) + 50 DH (NIZAR) = 130 DH**
+- Numbers should match!
+
+### Investigation
+
+#### Data Sources Comparison
+
+```
+Source 1: Revenue Card (reports/views.py)
+├── total_expected = SUM(plan prices for active members)
+├── total_paid_all = SUM(Payment.amount for active members)
+└── total_debt = total_expected - total_paid_all
+    Result: 80 DH
+
+Source 2: Member Badge (member.remaining_debt property)  
+├── Each member: plan.price - amount_paid (stored field)
+├── HODAYFA: 200 - 120 = 80 DH
+├── NIZAR:   200 - 150 = 50 DH
+└── Total: 130 DH
+
+WHY DIFFERENT?
+├── Payment records say total_paid = X
+├── Member amount_paid fields say total = Y
+└── X ≠ Y because amount_paid was CORRUPTED by Bug #5!
+```
+
+### Root Cause
+
+**`member.amount_paid` (stored database field) is out of sync with actual Payment records.**
+
+This happened because of **Bug #5** (payment doubling) - when it was active, some members got wrong `amount_paid` values. Even though Bug #5 is fixed for NEW payments, the OLD corrupted data still exists.
+
+### Proposed Fix
+
+**Single Source of Truth Principle:**
+
+Option A: Make `remaining_debt` compute from Payment records (most reliable):
+```python
+@property
+def remaining_debt(self):
+    from subscriptions.models import Payment
+    from django.db.models import Sum
+    actual_paid = Payment.objects.filter(
+        member=self,
+        period_start=self.subscription_start,
+        period_end=self.subscription_end,
+    ).aggregate(total=Sum('amount'))['total'] or 0
+    return max(0, self.membership_plan.price - actual_paid)
+```
+
+Option B: Fix corrupted data + keep current property:
+```bash
+python manage.py recalculate_payments  # Already created!
+```
+
+**Chosen: Option B** - Run recalculate_payments command first. If data drifts again in the future, upgrade to Option A.
+
+---
