@@ -124,6 +124,27 @@ class GymViewSet(viewsets.ModelViewSet):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    @action(detail=False, methods=['post'], url_path='reset-demo')
+    def reset_demo(self, request):
+        """Reset demo gym data to exactly 120 members. Super Admin only."""
+        from django.core.management import call_command
+        from io import StringIO
+        
+        try:
+            out = StringIO()
+            call_command('create_demo_gym', '--reset', stdout=out)
+            output = out.getvalue()
+            return Response({
+                'status': 'success',
+                'message': 'Demo data reset to 120 members',
+                'output': output
+            })
+        except Exception as e:
+            return Response(
+                {'status': 'error', 'message': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     @action(detail=True, methods=['get'])
     def stats(self, request, pk=None):
         """Get real stats for a specific gym tenant."""

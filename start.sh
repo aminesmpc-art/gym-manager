@@ -26,9 +26,9 @@ echo "Running migrations in background..."
     python manage.py setup_public_tenant
     python manage.py create_superuser_if_needed
     
-    # Create demo gym with --reset to fix member count
-    echo "Creating demo gym with reset..."
-    python manage.py create_demo_gym --reset
+    # Create demo gym (skips if data already exists)
+    echo "Creating demo gym..."
+    python manage.py create_demo_gym
     
     echo "Migrations and demo setup completed!"
 ) &
