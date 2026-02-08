@@ -115,7 +115,7 @@ if connection.schema_name == 'public':
 ## Bug #5: Payment Amount Doubles on New Member Creation 🔴
 
 **Date**: 2026-02-08
-**Status**: 🔄 FIXING
+**Status**: ✅ SOLVED
 
 ### Symptoms
 - Add new member with plan price 200 DH

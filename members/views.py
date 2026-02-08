@@ -228,17 +228,27 @@ class MemberViewSet(viewsets.ModelViewSet):
         if membership_plan.price > 0:
             from subscriptions.models import Payment
             from django.utils import timezone
+            from decimal import Decimal
+            
+            # Get user-entered amount_paid from request (defaults to plan price if not provided)
+            user_amount_paid = serializer.validated_data.get('amount_paid')
+            if user_amount_paid is None or user_amount_paid == '':
+                payment_amount = membership_plan.price
+            else:
+                try:
+                    payment_amount = Decimal(str(user_amount_paid))
+                except:
+                    payment_amount = membership_plan.price
             
             # IMPORTANT: Reset amount_paid BEFORE creating Payment
             # Payment.save() will set it to the correct value
-            # This prevents doubling when frontend sends amount_paid
             member.amount_paid = 0
             member.save(update_fields=['amount_paid'])
             
             Payment.objects.create(
                 member=member,
                 membership_plan=membership_plan,
-                amount=membership_plan.price,
+                amount=payment_amount,  # Use user-entered amount instead of plan price!
                 payment_date=timezone.now().date(),
                 payment_method='CASH', # Default
                 period_start=subscription_start,
