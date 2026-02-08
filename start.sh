@@ -11,7 +11,10 @@ echo "Running migrations in background..."
     python manage.py migrate_schemas
     python manage.py setup_public_tenant
     python manage.py create_superuser_if_needed
-    echo "Migrations completed!"
+    # Create demo gym AFTER migrations complete
+    echo "Creating demo gym..."
+    python manage.py create_demo_gym
+    echo "Migrations and demo setup completed!"
 ) &
 
 # Start gunicorn immediately so health check passes
