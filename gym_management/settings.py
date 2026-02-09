@@ -97,6 +97,12 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# ============= INTERNATIONALIZATION =============
+LANGUAGE_CODE = 'en-us'
+TIME_ZONE = 'Africa/Casablanca'
+USE_I18N = True
+USE_TZ = True
+
 ROOT_URLCONF = 'gym_management.urls'
 
 TEMPLATES = [
