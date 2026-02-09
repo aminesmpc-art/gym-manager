@@ -73,15 +73,18 @@ class HealthCheckMiddleware:
             print(f"[Middleware] Tenant setup skipped: {e}")
     
     def _ensure_superuser(self):
-        """Auto-create superuser if not exists."""
+        """Auto-create superuser only if DJANGO_SUPERUSER_PASSWORD is explicitly set."""
         try:
+            password = os.environ.get('DJANGO_SUPERUSER_PASSWORD')
+            if not password:
+                return  # Don't create with default password
+            
             from django.contrib.auth import get_user_model
             from django_tenants.utils import schema_context
             
             User = get_user_model()
             username = os.environ.get('DJANGO_SUPERUSER_USERNAME', 'admin')
             email = os.environ.get('DJANGO_SUPERUSER_EMAIL', 'admin@gym.local')
-            password = os.environ.get('DJANGO_SUPERUSER_PASSWORD', 'admin123')
             
             # Create in public schema
             with schema_context('public'):
@@ -93,8 +96,6 @@ class HealthCheckMiddleware:
                         password=password
                     )
                     print(f"[Middleware] Superuser {username} created!")
-                else:
-                    print(f"[Middleware] Superuser {username} already exists")
                     
         except Exception as e:
             print(f"[Middleware] Superuser creation skipped: {e}")

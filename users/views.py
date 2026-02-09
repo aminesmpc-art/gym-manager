@@ -1,4 +1,5 @@
 from rest_framework import status, viewsets, permissions
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -109,12 +110,18 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return data
 
 
+class LoginRateThrottle(AnonRateThrottle):
+    """Limit login attempts to 5 per minute per IP to prevent brute-force."""
+    rate = '5/min'
+
+
 class CustomTokenObtainPairView(TokenObtainPairView):
     """
     Custom view for login with multi-tenant gym_slug support.
-    
+    Rate limited to prevent brute-force attacks.
     """
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = [LoginRateThrottle]
 
 
 class IsAdminUser(permissions.BasePermission):
