@@ -32,8 +32,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project
 COPY . .
 
-# Collect static files
-RUN python manage.py collectstatic --noinput
+# Collect static files (needs a dummy SECRET_KEY at build time — real key comes from env at runtime)
+RUN SECRET_KEY=build-only-dummy-key python manage.py collectstatic --noinput
 
 # Expose port
 EXPOSE $PORT
