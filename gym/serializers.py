@@ -27,8 +27,10 @@ class MembershipPlanSerializer(serializers.ModelSerializer):
         model = MembershipPlan
         fields = [
             'id', 'activity_type', 'activity_type_name', 
-            'name', 'duration_days', 'price', 
-            'is_active', 'description'
+            'name', 'duration_days', 'price', 'currency',
+            'is_active', 'description',
+            'sessions_limit', 'allowed_gender', 'age_category',
+            'insurance_required',
         ]
 
 class GymSerializer(serializers.ModelSerializer):
