@@ -194,6 +194,9 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20,
     'PAGE_SIZE_QUERY_PARAM': 'page_size',
     'MAX_PAGE_SIZE': 1000,
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '20/min',
+    },
 }
 
 
@@ -207,17 +210,11 @@ SIMPLE_JWT = {
 }
 
 
-# CORS Settings - locked down to specific origins
+# CORS Settings
+# Flutter apps (mobile + web) call from various origins,
+# so we allow all origins. Auth is handled by JWT, not cookies.
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
-if DEBUG:
-    CORS_ALLOW_ALL_ORIGINS = True  # Only in development
-else:
-    CORS_ALLOW_ALL_ORIGINS = False
-    CORS_ALLOWED_ORIGINS = config(
-        'CORS_ALLOWED_ORIGINS',
-        default='https://gym-backend-production-1547.up.railway.app',
-        cast=Csv()
-    )
 
 
 # Twilio settings (optional - for SMS)
@@ -232,7 +229,8 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_SSL_REDIRECT = True
+    # NOTE: Do NOT enable SECURE_SSL_REDIRECT — Railway handles SSL at the proxy.
+    # Enabling it causes redirect loops since internal traffic is HTTP.
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
