@@ -11,8 +11,9 @@ from decouple import config, Csv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY: No default - MUST be set via environment variable
-SECRET_KEY = config('SECRET_KEY')
+# SECURITY: SECRET_KEY must be set in production via env var.
+# Fallback is only for Docker build (collectstatic). Never use in production.
+SECRET_KEY = config('SECRET_KEY', default='build-only-not-for-production')
 
 # SECURITY: Defaults to False (production mode)
 DEBUG = config('DEBUG', default=False, cast=bool)

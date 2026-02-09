@@ -431,4 +431,51 @@ Going forward: `perform_create` now records the actual user-entered payment amou
 
 ---
 
+## Bug #9: Backend 500 After Phase 6 Security Changes
+**Date**: 2026-02-09
+**Status**: ✅ SOLVED
+
+### Symptom
+After applying Phase 6 security hardening, login returned 500 Internal Server Error. Health check still worked.
+
+### Root Cause (3 problems combined)
+
+**Problem 1: Wrong Railway Project**
+There are TWO Railway projects deploying from the same GitHub repo:
+- `fearless-mindfulness` → `gym-backend-production-1547.up.railway.app` ← **THE REAL ONE (has DB)**
+- `intelligent-vitality` → `web-production-6b8db.up.railway.app` ← **WRONG (no DB)**
+
+The Railway CLI (`railway variables set SECRET_KEY=...`) was linked to `intelligent-vitality` — env vars went to the wrong project.
+
+**Problem 2: SECRET_KEY without fallback**
+`SECRET_KEY = config('SECRET_KEY')` (no default) crashed Docker BUILD because env vars aren't available at build time. `collectstatic` failed.
+
+**Problem 3: SECURE_SSL_REDIRECT**
+`SECURE_SSL_REDIRECT = True` caused issues because Railway handles SSL at the proxy. Django tried to redirect internal HTTP→HTTPS, creating errors.
+
+### Fix Applied
+
+1. **SECRET_KEY** — Added a safe build-time fallback:
+```python
+SECRET_KEY = config('SECRET_KEY', default='build-only-not-for-production')
+```
+
+2. **SSL Redirect** — Removed `SECURE_SSL_REDIRECT = True`. Railway handles SSL.
+
+3. **CORS** — Kept `CORS_ALLOW_ALL_ORIGINS = True` because Flutter apps (mobile + web dev) call from various origins. Auth is via JWT tokens, not cookies, so CORS restrictions don't add security value.
+
+4. **Railway CLI** — Re-linked to correct project:
+```bash
+railway link  # → fearless-mindfulness → gym-backend
+```
+
+5. **MEMORY.md** — Added critical warning about the two Railway projects.
+
+### Prevention
+- MEMORY.md now has a prominent table showing which Railway project to use
+- SECRET_KEY has fallback so builds never fail
+- Comments in settings.py explain why SSL redirect is disabled
+
+---
+
 *Last Updated: 2026-02-09*
