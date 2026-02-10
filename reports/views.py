@@ -199,12 +199,11 @@ class DashboardView(views.APIView):
             count=Count('id')
         ).order_by('-count')
         
-        # 5. Demographic Counts (filtered for staff)
-        # Note: age_category might be blank for some members, so we count by gender only
+        # 5. Demographic Counts (filtered for staff, active members only)
         try:
-            men_count = members.filter(gender='M').count()
-            women_count = members.filter(gender='F').count()
-            kids_count = members.filter(age_category='CHILD').count()
+            men_count = active_member_list.filter(gender='M').count()
+            women_count = active_member_list.filter(gender='F').count()
+            kids_count = active_member_list.filter(age_category='CHILD').count()
         except Exception:
             men_count = 0
             women_count = 0
