@@ -19,11 +19,7 @@ SECRET_KEY = config('SECRET_KEY', default='build-only-not-for-production')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 # Railway and production hosts
-ALLOWED_HOSTS = config(
-    'ALLOWED_HOSTS', 
-    default='localhost,127.0.0.1,.localhost,.railway.app,.up.railway.app', 
-    cast=Csv()
-)
+ALLOWED_HOSTS = ["*"]
 
 # CSRF trusted origins for Railway
 CSRF_TRUSTED_ORIGINS = [
