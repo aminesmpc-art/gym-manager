@@ -108,11 +108,28 @@ class SafeTenantMiddleware:
     This middleware safely resolves the tenant or falls back to the public schema.
     """
     
+    # Paths that don't need tenant resolution via domain (always use public)
+    PUBLIC_PATHS = [
+        '/api/auth/',
+        '/api/tenants/', 
+        '/admin/',
+        '/',  # Root path
+    ]
+    
     def __init__(self, get_response):
         self.get_response = get_response
     
     def __call__(self, request):
         try:
+            # OPTIMIZATION: Skip DB lookup for public paths
+            # This prevents timeouts on sync workers if DB is slow
+            for path in self.PUBLIC_PATHS:
+                if request.path.startswith(path):
+                    from tenants.models import Gym
+                    connection.set_schema('public')
+                    request.tenant = Gym(schema_name='public', name='Public') # Dummy implementation
+                    return self.get_response(request)
+
             hostname = request.get_host().split(':')[0]
             
             from tenants.models import Gym, Domain
