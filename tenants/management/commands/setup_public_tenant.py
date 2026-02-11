@@ -15,7 +15,7 @@ class Command(BaseCommand):
         # Get Railway domain from environment or use default
         railway_domain = os.environ.get(
             'RAILWAY_PUBLIC_DOMAIN', 
-            'gym-backend-production-2b99.up.railway.app'
+            'gym-backend-production-1547.up.railway.app'
         )
         
         self.stdout.write(f'Setting up public tenant for domain: {railway_domain}')
@@ -44,6 +44,11 @@ class Command(BaseCommand):
             
             if not domain_exists:
                 self.stdout.write(f'Adding domain: {railway_domain}')
+                # Remove any old Railway domains that might be stale
+                old_railway = Domain.objects.filter(domain__endswith='.up.railway.app').exclude(domain=railway_domain)
+                if old_railway.exists():
+                    self.stdout.write(f'Removing stale Railway domains: {list(old_railway.values_list("domain", flat=True))}')
+                    old_railway.delete()
                 Domain.objects.create(
                     domain=railway_domain,
                     tenant=public_tenant,
@@ -61,6 +66,10 @@ class Command(BaseCommand):
                     is_primary=False
                 )
                 self.stdout.write('Added localhost domain for development.')
+            
+            # Log all registered domains for debugging
+            all_domains = list(Domain.objects.all().values_list('domain', 'tenant__schema_name'))
+            self.stdout.write(f'All registered domains: {all_domains}')
                 
         except Exception as e:
             self.stdout.write(self.style.ERROR(f'Error: {e}'))
