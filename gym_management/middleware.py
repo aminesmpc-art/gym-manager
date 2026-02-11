@@ -1,6 +1,6 @@
 """
 Custom middleware for Railway deployment.
-Handles health checks, auto-creates public tenant, creates superuser, and JWT-based tenant routing.
+Handles health checks, auth bypass, auto-creates public tenant, creates superuser, and JWT-based tenant routing.
 """
 import os
 import jwt
@@ -12,11 +12,23 @@ class HealthCheckMiddleware:
     """
     Middleware that:
     1. Responds to /health/ BEFORE tenant middleware runs
-    2. Auto-creates public tenant on first request
-    3. Auto-creates superuser if missing
+    2. Sets public schema for auth endpoints (bypasses TenantMainMiddleware domain lookup)
+    3. Auto-creates public tenant on first request
+    4. Auto-creates superuser if missing
     
     MUST be placed BEFORE TenantMainMiddleware in settings.MIDDLEWARE.
     """
+    
+    # Paths that should use the public schema and bypass tenant domain resolution
+    PUBLIC_PATHS = [
+        '/health/',
+        '/health',
+        '/',
+        '/api/auth/login/',
+        '/api/auth/refresh/',
+        '/api/tenants/',
+        '/admin/',
+    ]
     
     def __init__(self, get_response):
         self.get_response = get_response
@@ -30,14 +42,42 @@ class HealthCheckMiddleware:
                 'service': 'gym-backend'
             })
         
+        # For auth and tenant management endpoints, set the public schema
+        # This prevents TenantMainMiddleware from hanging on domain lookup
+        if self._is_public_path(request.path):
+            self._set_public_schema(request)
+        
         # On first real request, ensure public tenant and superuser exist
         if not self._setup_attempted:
             self._setup_attempted = True
-            hostname = request.get_host().split(':')[0]
-            self._ensure_public_tenant(hostname)
-            self._ensure_superuser()
+            try:
+                hostname = request.get_host().split(':')[0]
+                self._ensure_public_tenant(hostname)
+                self._ensure_superuser()
+            except Exception as e:
+                print(f"[Middleware] Setup error (non-fatal): {e}")
         
         return self.get_response(request)
+    
+    def _is_public_path(self, path):
+        """Check if the path should bypass tenant middleware."""
+        for public_path in self.PUBLIC_PATHS:
+            if path.startswith(public_path):
+                return True
+        return False
+    
+    def _set_public_schema(self, request):
+        """Set the public tenant on the request so TenantMainMiddleware skips domain lookup."""
+        try:
+            from tenants.models import Gym
+            from django.db import connection
+            
+            public_tenant = Gym.objects.filter(schema_name='public').first()
+            if public_tenant:
+                request.tenant = public_tenant
+                connection.set_tenant(public_tenant)
+        except Exception as e:
+            print(f"[Middleware] Failed to set public schema: {e}")
     
     def _ensure_public_tenant(self, hostname):
         """Auto-create public tenant with current hostname if not exists."""
@@ -161,5 +201,3 @@ class JWTTenantMiddleware:
         except Exception as e:
             print(f"[JWTTenantMiddleware] Failed to decode token: {e}")
             return None
-
-
