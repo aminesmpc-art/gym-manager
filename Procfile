@@ -1,1 +1,1 @@
-web: python manage.py migrate_schemas --shared && python manage.py migrate_schemas && python manage.py setup_public_tenant && python manage.py create_superuser_if_needed && gunicorn gym_management.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --threads 2 --worker-class gthread --timeout 120 --graceful-timeout 120 --log-level info --access-logfile - --error-logfile -
+web: gunicorn gym_management.wsgi:application -c gunicorn.conf.py
