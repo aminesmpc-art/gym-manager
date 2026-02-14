@@ -478,4 +478,84 @@ railway link  # → fearless-mindfulness → gym-backend
 
 ---
 
-*Last Updated: 2026-02-09*
+## Bug #10: Check-in Success Animation Double-Fire
+**Date**: 2026-02-10
+**Status**: ✅ SOLVED
+
+### Symptoms
+- Clicking "Check In" on a member sometimes showed a brief success flash then nothing
+- Success snackbar would appear and immediately get replaced
+- No clear error feedback when check-in failed or was blocked
+
+### Investigation
+1. `_checkInMember()` dispatches `RecordCheckin` to the bloc AND immediately calls `_showSuccessAnimation()` (optimistic)
+2. `BlocListener` in the `build()` method ALSO calls `_showSuccessAnimation()` when it detects a successful state change
+3. This double-fire caused the first snackbar to be replaced by the second
+4. If the API returned "blocked" or "failed", the optimistic success snackbar had already shown
+
+### Root Cause
+**Optimistic UI update conflicting with BlocListener feedback.** `_checkInMember` assumed success before the API responded, then the BlocListener tried to show feedback again.
+
+### Solution
+**File**: `checkin_screen.dart`
+1. Removed `_showSuccessAnimation()` from `_checkInMember()` — now only dispatches the event
+2. Made `BlocListener` the single source of truth for all feedback:
+   - ✅ `CheckinResult.allowed` → Green success snackbar with member name
+   - ⚠️ `CheckinResult.warning` → Orange snackbar with warning message
+   - 🚫 `CheckinResult.blocked` → Red snackbar with block reason
+3. Fixed member lookup to use `_lastCheckedInId` instead of searching all checked-in members
+
+---
+
+## Bug #11: Timezone Mismatch — "Today's Check-Ins" Empty
+**Date**: 2026-02-10
+**Status**: ✅ SOLVED
+
+### Symptoms
+- Check-in page shows "No check-ins yet" even when members were checked in today
+- Clicking "Check In" returns "BRAHIM BELAID has already checked in today" (red snackbar)
+- Backend knows about existing check-ins, but frontend can't see them
+- Bug most visible around midnight local time
+
+### Investigation
+1. Added debug prints to `CheckinBloc` and `CheckinRemoteDataSourceImpl`
+2. API call `GET /api/attendance/?date=2026-02-10` returned `{"results": []}` (empty!)
+3. But the same member's check-in existed — just under a different date
+4. Checked Django settings: **no `TIME_ZONE` setting defined at all**
+
+### Root Cause
+**Django defaulted to UTC timezone. Flutter uses local time (UTC+1, Morocco).**
+
+```
+Timeline at 00:30 AM Morocco time (UTC+1):
+┌──────────────┬──────────────────┬──────────────────┐
+│              │ Django (UTC)     │ Flutter (UTC+1)  │
+├──────────────┼──────────────────┼──────────────────┤
+│ Current time │ 23:30 Feb 9      │ 00:30 Feb 10     │
+│ "today" date │ 2026-02-09       │ 2026-02-10       │
+│ Stores as    │ date=2026-02-09  │ Queries 02-10    │
+│ Result       │ Check-in exists  │ "No results"     │
+└──────────────┴──────────────────┴──────────────────┘
+```
+
+`timezone.now().date()` in Django returned UTC date. `DateTime.now()` in Flutter returned local date. Around midnight, they disagreed on what "today" is.
+
+### Solution
+**File**: `gym_management/settings.py`
+```python
+# Added timezone settings
+LANGUAGE_CODE = 'en-us'
+TIME_ZONE = 'Africa/Casablanca'
+USE_I18N = True
+USE_TZ = True
+```
+
+Now `timezone.now()` returns Casablanca time → `timezone.now().date()` matches Flutter's `DateTime.now()` .
+
+### Prevention
+- Always set `TIME_ZONE` to the gym's physical location timezone
+- Both frontend and backend now agree on what "today" means
+
+---
+
+*Last Updated: 2026-02-10*

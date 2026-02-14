@@ -71,16 +71,16 @@ All plans have **unlimited members**.
 | Phase 4 | ✅ DONE | Super Admin, Multi-tenancy, Gym Management |
 | Phase 5 | ✅ DONE | CSV Export, Renewal Dialog, Skeleton Loaders |
 | Password Mgmt | ✅ DONE | Reset/Set admin passwords |
-| Bug Fixes | ✅ DONE | 9 bugs fixed (see DEBUG.md) |
+| Bug Fixes | ✅ DONE | 11 bugs fixed (see DEBUG.md) |
 | Phase 6 | ✅ DONE | Security hardening |
 
-### 📍 WHERE WE ARE NOW (2026-02-09):
+### 📍 WHERE WE ARE NOW (2026-02-10):
 
 **All features complete + production-ready!**
 
 - ✅ All core features (Members, Attendance, Subscriptions, Dashboard, Reports)
 - ✅ Super Admin (Create/Approve/Suspend gyms, change plans)
-- ✅ 9 bugs fixed (see DEBUG.md for details)
+- ✅ 11 bugs fixed (see DEBUG.md for details)
 
 **Phase 6 Security (applied 2026-02-09):**
 - ✅ SECRET_KEY safe (with build-time fallback, requires env var in production)
@@ -101,6 +101,7 @@ All plans have **unlimited members**.
 -`migrate` + `gunicorn` run at RUNTIME (env vars available)
 - `SECRET_KEY` has a safe build-time fallback — real key is set via env var
 - **Do NOT enable `SECURE_SSL_REDIRECT`** — Railway handles SSL at the proxy level
+- **TIME_ZONE set to `Africa/Casablanca`** — critical for date-based queries (attendance, check-ins)
 
 ### Payment Logic:
 - `member.amount_paid` = stored field, the reliable source for debt calculation
@@ -189,7 +190,9 @@ All bugs documented in **`DEBUG.md`**.
 | #7 | Chart Paid/Pending Wrong | ✅ SOLVED |
 | #8 | Debt Mismatch Card vs Badges | ✅ SOLVED |
 | #9 | Backend 500 after security changes | ✅ SOLVED |
+| #10 | Check-in double-fire animation | ✅ SOLVED |
+| #11 | Timezone mismatch (empty Today's Check-Ins) | ✅ SOLVED |
 
 ---
 
-*Last Updated: 2026-02-09 21:50*
+*Last Updated: 2026-02-10 00:35*

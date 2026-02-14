@@ -18,16 +18,19 @@ class DashboardView(views.APIView):
     
     def get_member_queryset(self, user):
         """Get member queryset filtered by user's permissions."""
+        # Base query - Exclude archived members globally for dashboard
+        queryset = Member.objects.filter(is_archived=False)
+
         if user.is_admin:
-            return Member.objects.all()
+            return queryset
         
         if user.is_staff_member and user.allowed_gender:
             if user.allowed_gender == 'CHILD':
-                return Member.objects.filter(age_category='CHILD')
+                return queryset.filter(age_category='CHILD')
             else:
-                return Member.objects.filter(gender=user.allowed_gender).exclude(age_category='CHILD')
+                return queryset.filter(gender=user.allowed_gender).exclude(age_category='CHILD')
         
-        return Member.objects.all()
+        return queryset
     
     def get(self, request):
         user = request.user
@@ -143,28 +146,22 @@ class DashboardView(views.APIView):
         
         # 2b. Debt & Payment Tracking
         active_member_list = members.filter(subscription_end__gte=today)
-        active_member_ids = list(active_member_list.values_list('id', flat=True))
         
         # Revenue card shows THIS MONTH's collected revenue
         collected_revenue = float(income_month)
         
-        # Total debt = sum of remaining_debt for all active members
-        total_expected = sum(
-            float(m.membership_plan.price) if m.membership_plan else 0
-            for m in active_member_list.select_related('membership_plan')
-        )
-        total_paid_all = float(
-            Payment.objects.filter(
-                member_id__in=active_member_ids
-            ).aggregate(total=Sum('amount'))['total'] or 0
-        )
-        total_debt = max(total_expected - total_paid_all, 0)
-        
-        # Count members with/without debt
+        # Total debt & counts
+        total_debt = 0.0
         members_with_debt = 0
         paid_members_count = 0
+        
         for m in active_member_list:
-            plan_price = float(m.membership_plan.price) if m.membership_plan else 0
+            if not m.membership_plan:
+                continue
+
+            plan_price = float(m.membership_plan.price)
+            
+            # Get payments for THIS specific subscription period only
             member_payments = float(
                 Payment.objects.filter(
                     member=m,
@@ -172,10 +169,15 @@ class DashboardView(views.APIView):
                     period_end=m.subscription_end,
                 ).aggregate(total=Sum('amount'))['total'] or 0
             )
-            if member_payments >= plan_price:
-                paid_members_count += 1
-            else:
+            
+            # Debt is remaining price for this period
+            current_debt = max(plan_price - member_payments, 0)
+            total_debt += current_debt
+            
+            if current_debt > 0:
                 members_with_debt += 1
+            else:
+                paid_members_count += 1
         
         # 2c. Insurance Tracking
         insurance_paid_count = members.filter(insurance_paid=True).count()
