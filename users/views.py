@@ -2,8 +2,9 @@ from rest_framework import status, viewsets, permissions
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django_tenants.utils import schema_context
@@ -122,6 +123,49 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     """
     serializer_class = CustomTokenObtainPairSerializer
     throttle_classes = [LoginRateThrottle]
+
+
+class CustomTokenRefreshSerializer(TokenRefreshSerializer):
+    """
+    Custom refresh serializer that checks gym status before issuing new tokens.
+    If the gym was suspended after the original login, the refresh is rejected.
+    """
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+
+        # Decode the refresh token to read gym_slug (without verifying signature
+        # since SimpleJWT already verified it above in super().validate())
+        import jwt as pyjwt
+        try:
+            refresh_token = attrs.get('refresh', '')
+            decoded = pyjwt.decode(refresh_token, options={"verify_signature": False})
+            gym_slug = decoded.get('gym_slug', 'public')
+        except Exception:
+            gym_slug = 'public'
+
+        if gym_slug and gym_slug != 'public':
+            from tenants.models import Gym
+            try:
+                with schema_context('public'):
+                    gym = Gym.objects.get(schema_name=gym_slug)
+                    if gym.status != 'approved':
+                        raise serializers.ValidationError({
+                            'detail': 'This gym has been suspended.',
+                            'code': 'gym_suspended',
+                        })
+            except Gym.DoesNotExist:
+                raise serializers.ValidationError({
+                    'detail': 'Gym not found.',
+                    'code': 'gym_not_found',
+                })
+
+        return data
+
+
+class CustomTokenRefreshView(TokenRefreshView):
+    """Custom refresh view that checks gym status before issuing new tokens."""
+    serializer_class = CustomTokenRefreshSerializer
 
 
 class IsAdminUser(permissions.BasePermission):

@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
-from users.views import CustomTokenObtainPairView
+from users.views import CustomTokenObtainPairView, CustomTokenRefreshView
 from users.urls import payment_urls
 
 
@@ -36,7 +36,7 @@ urlpatterns = [
     
     # JWT Authentication
     path('api/auth/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
     
     # API endpoints
     path('api/users/', include('users.urls')),

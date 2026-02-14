@@ -120,17 +120,29 @@ class SafeTenantMiddleware:
         self.get_response = get_response
     
     def __call__(self, request):
+        import time, os, threading
+        pid = os.getpid()
+        tid = threading.get_ident()
+        start_time = time.time()
+        
+        print(f"[SafeTenant] [{pid}:{tid}] Processing {request.method} {request.path}")
+        
         try:
             # OPTIMIZATION: Skip DB lookup for public paths
             # This prevents timeouts on sync workers if DB is slow
             for path in self.PUBLIC_PATHS:
                 if request.path.startswith(path):
+                    print(f"[SafeTenant] [{pid}:{tid}] Optimized path matched: {path}")
                     from tenants.models import Gym
                     connection.set_schema('public')
                     request.tenant = Gym(schema_name='public', name='Public') # Dummy implementation
+                    
+                    elapsed = time.time() - start_time
+                    print(f"[SafeTenant] [{pid}:{tid}] Set public schema for {request.path} trace_time={elapsed:.4f}s")
                     return self.get_response(request)
 
             hostname = request.get_host().split(':')[0]
+            print(f"[SafeTenant] [{pid}:{tid}] Resolving tenant for hostname: {hostname}")
             
             from tenants.models import Gym, Domain
             
@@ -138,24 +150,31 @@ class SafeTenantMiddleware:
             try:
                 domain = Domain.objects.select_related('tenant').get(domain=hostname)
                 tenant = domain.tenant
+                print(f"[SafeTenant] [{pid}:{tid}] Found tenant: {tenant.schema_name}")
             except Domain.DoesNotExist:
                 # Domain not found - fall back to public tenant
-                print(f"[SafeTenant] Domain '{hostname}' not found, using public schema")
+                print(f"[SafeTenant] [{pid}:{tid}] Domain '{hostname}' not found, using public schema")
                 tenant = Gym.objects.filter(schema_name='public').first()
                 
                 if tenant is None:
                     # No public tenant exists yet - just use public schema directly
-                    print(f"[SafeTenant] No public tenant found, setting schema to 'public'")
+                    print(f"[SafeTenant] [{pid}:{tid}] No public tenant found, setting schema to 'public'")
                     connection.set_schema('public')
                     request.tenant = None
+                    elapsed = time.time() - start_time
+                    print(f"[SafeTenant] [{pid}:{tid}] Fallback complete trace_time={elapsed:.4f}s")
                     return self.get_response(request)
             
             # Set the tenant on the request and connection
             request.tenant = tenant
             connection.set_tenant(tenant)
             
+            elapsed = time.time() - start_time
+            print(f"[SafeTenant] [{pid}:{tid}] Tenant set: {tenant.schema_name} trace_time={elapsed:.4f}s")
+            
         except Exception as e:
-            print(f"[SafeTenant] Error resolving tenant: {e}, falling back to public")
+            elapsed = time.time() - start_time
+            print(f"[SafeTenant] [{pid}:{tid}] Error resolving tenant: {e}, falling back to public trace_time={elapsed:.4f}s")
             connection.set_schema('public')
             request.tenant = None
         
@@ -165,15 +184,20 @@ class SafeTenantMiddleware:
 class JWTTenantMiddleware:
     """
     Middleware that reads gym_slug from JWT token and switches to the correct tenant schema.
+    Also blocks requests if the gym is suspended/pending.
     MUST be placed AFTER AuthenticationMiddleware in settings.MIDDLEWARE.
     """
+    
+    # Paths that should bypass the suspension check (e.g. login, register, public)
+    BYPASS_PATHS = ('/health/', '/health', '/api/auth/login/', '/api/auth/register/',
+                    '/api/auth/refresh/', '/api/tenants/check-status/')
     
     def __init__(self, get_response):
         self.get_response = get_response
     
     def __call__(self, request):
-        # Skip for unauthenticated endpoints
-        if request.path in ('/health/', '/health', '/api/auth/login/', '/api/auth/register/'):
+        # Skip for unauthenticated / public endpoints
+        if request.path in self.BYPASS_PATHS:
             return self.get_response(request)
         
         # Try to get gym_slug from JWT token
@@ -182,16 +206,32 @@ class JWTTenantMiddleware:
         if gym_slug and gym_slug != 'public':
             from django_tenants.utils import schema_context
             
-            tenant_exists = False
             try:
                 from tenants.models import Gym
                 with schema_context('public'):
-                    tenant_exists = Gym.objects.filter(schema_name=gym_slug).exists()
+                    gym = Gym.objects.filter(schema_name=gym_slug).first()
             except Exception as e:
                 print(f"[JWTTenant] Failed to check tenant: {e}")
+                gym = None
             
-            if tenant_exists:
-                connection.set_schema(gym_slug)
+            if gym is None:
+                return JsonResponse(
+                    {'detail': 'Gym not found.', 'code': 'gym_not_found'},
+                    status=404
+                )
+            
+            if gym.status != 'approved':
+                print(f"[JWTTenant] Blocked request: gym '{gym_slug}' status={gym.status}")
+                return JsonResponse(
+                    {
+                        'detail': 'This gym has been suspended by the administrator.',
+                        'code': 'gym_suspended',
+                        'status': gym.status,
+                    },
+                    status=403
+                )
+            
+            connection.set_schema(gym_slug)
         
         return self.get_response(request)
     

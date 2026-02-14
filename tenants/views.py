@@ -442,3 +442,43 @@ class GymRegistrationView(APIView):
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
+class CheckGymStatusView(APIView):
+    """
+    Public endpoint to check if a gym is active.
+    No authentication required — used by the mobile app to detect suspension.
+    
+    GET /api/tenants/check-status/?slug=<gym_slug>
+    
+    Returns:
+      200 {"slug": "...", "status": "approved", "name": "..."}
+      404 {"detail": "Gym not found."}
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        slug = request.query_params.get('slug', '').strip()
+        if not slug:
+            return Response(
+                {'detail': 'slug query parameter is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            gym = Gym.objects.get(schema_name=slug)
+        except Gym.DoesNotExist:
+            # Also try matching by slug field (hyphens vs underscores)
+            try:
+                gym = Gym.objects.get(slug=slug)
+            except Gym.DoesNotExist:
+                return Response(
+                    {'detail': 'Gym not found.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        return Response({
+            'slug': gym.schema_name,
+            'status': gym.status,
+            'name': gym.name,
+        })
+
