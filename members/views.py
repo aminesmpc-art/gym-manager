@@ -37,12 +37,17 @@ class MemberViewSet(viewsets.ModelViewSet):
         user = self.request.user
         base_queryset = Member.objects.select_related('user', 'activity_type', 'membership_plan')
         
-        # 1. Access Control
+        # 1. Access Control (supports comma-separated allowed_gender e.g. "M,F" or "M,CHILD")
         if user.is_staff_member and user.allowed_gender:
-            if user.allowed_gender == 'CHILD':
-                base_queryset = base_queryset.filter(age_category='CHILD')
-            else:
-                base_queryset = base_queryset.filter(gender=user.allowed_gender).exclude(age_category='CHILD')
+            genders = [g.strip() for g in user.allowed_gender.split(',')]
+            from django.db.models import Q
+            q = Q()
+            if 'CHILD' in genders:
+                q |= Q(age_category='CHILD')
+            adult_genders = [g for g in genders if g != 'CHILD']
+            if adult_genders:
+                q |= Q(gender__in=adult_genders, age_category__in=['ADULT', ''])
+            base_queryset = base_queryset.filter(q) if q else base_queryset.none()
         elif user.is_gym_member:
              return base_queryset.filter(user=user)
         # Admin sees all (no extra filter)

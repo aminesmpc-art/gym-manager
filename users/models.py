@@ -36,11 +36,10 @@ class User(AbstractUser):
         help_text='User role determining permissions'
     )
     allowed_gender = models.CharField(
-        max_length=10,
-        choices=AllowedGender.choices,
+        max_length=20,
         null=True,
         blank=True,
-        help_text='Gender category this staff can manage (null = all)'
+        help_text='Gender categories this staff can manage, comma-separated (e.g. "M,F" or "CHILD"). Null = all.'
     )
     monthly_salary = models.DecimalField(
         max_digits=10,

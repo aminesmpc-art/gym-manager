@@ -25,10 +25,15 @@ class DashboardView(views.APIView):
             return queryset
         
         if user.is_staff_member and user.allowed_gender:
-            if user.allowed_gender == 'CHILD':
-                return queryset.filter(age_category='CHILD')
-            else:
-                return queryset.filter(gender=user.allowed_gender).exclude(age_category='CHILD')
+            from django.db.models import Q
+            genders = [g.strip() for g in user.allowed_gender.split(',')]
+            q = Q()
+            if 'CHILD' in genders:
+                q |= Q(age_category='CHILD')
+            adult_genders = [g for g in genders if g != 'CHILD']
+            if adult_genders:
+                q |= Q(gender__in=adult_genders, age_category__in=['ADULT', ''])
+            return queryset.filter(q) if q else queryset.none()
         
         return queryset
     
