@@ -449,6 +449,24 @@ class RevenueChartView(views.APIView):
     """
     permission_classes = [permissions.IsAuthenticated, IsAdminOrStaff]
 
+    def _get_income_data(self, payments_qs):
+        """
+        Helper: Calculate paid, unpaid, and total from a payment queryset.
+        - paid = actual money received (sum of payment amounts)
+        - unpaid = current remaining debt of members who paid in this period
+        - total = paid + unpaid
+        """
+        payments = list(payments_qs.select_related('member'))
+        paid_val = sum(float(p.amount) for p in payments if p.amount)
+        # Pending = outstanding debts of members who paid this period
+        seen_members = {}
+        for p in payments:
+            if p.member and p.member_id not in seen_members:
+                seen_members[p.member_id] = float(p.member.remaining_debt)
+        unpaid_val = sum(seen_members.values())
+        total_val = paid_val + unpaid_val
+        return total_val, paid_val, unpaid_val
+
     def get(self, request):
         period = request.query_params.get('period', 'month')
         chart_type = request.query_params.get('type', 'income')
@@ -459,32 +477,15 @@ class RevenueChartView(views.APIView):
         paid_values = []
         unpaid_values = []
 
-        # Get active member IDs for filtering (consistent with dashboard)
-        active_member_ids = list(
-            Member.objects.filter(subscription_end__gte=today).values_list('id', flat=True)
-        )
-
         if period == 'week':
             # Last 7 days - show actual dates
             for i in range(6, -1, -1):
                 day = today - timedelta(days=i)
-                # Show day with date: "Mon 3" or "Feb 3"
                 labels.append(day.strftime('%b %d'))  # e.g., "Feb 03"
                 if chart_type == 'income':
-                    # Get payments for active members only (consistent with dashboard)
-                    payments = Payment.objects.filter(
-                        payment_date=day,
-                        member_id__in=active_member_ids
-                    ).select_related('member')
-                    # All received payments = Paid (green bar)
-                    paid_val = sum(float(p.amount) for p in payments if p.amount)
-                    # Pending = outstanding debts of members who paid this period
-                    seen_members = {}
-                    for p in payments:
-                        if p.member and p.member_id not in seen_members:
-                            seen_members[p.member_id] = float(p.member.remaining_debt)
-                    unpaid_val = sum(seen_members.values())
-                    total_val = paid_val + unpaid_val
+                    # Revenue = ALL payments received on this day (not filtered by active status)
+                    qs = Payment.objects.filter(payment_date=day)
+                    total_val, paid_val, unpaid_val = self._get_income_data(qs)
                     values.append(total_val)
                     paid_values.append(paid_val)
                     unpaid_values.append(unpaid_val)
@@ -506,20 +507,12 @@ class RevenueChartView(views.APIView):
                 next_month = (month_date + timedelta(days=32)).replace(day=1)
                 labels.append(month_date.strftime('%b'))
                 if chart_type == 'income':
-                    payments = Payment.objects.filter(
+                    # Revenue = ALL payments received in this month
+                    qs = Payment.objects.filter(
                         payment_date__gte=month_date,
                         payment_date__lt=next_month,
-                        member_id__in=active_member_ids
-                    ).select_related('member')
-                    # All received payments = Paid (green bar)
-                    paid_val = sum(float(p.amount) for p in payments if p.amount)
-                    # Pending = outstanding debts of members who paid this period
-                    seen_members = {}
-                    for p in payments:
-                        if p.member and p.member_id not in seen_members:
-                            seen_members[p.member_id] = float(p.member.remaining_debt)
-                    unpaid_val = sum(seen_members.values())
-                    total_val = paid_val + unpaid_val
+                    )
+                    total_val, paid_val, unpaid_val = self._get_income_data(qs)
                     values.append(total_val)
                     paid_values.append(paid_val)
                     unpaid_values.append(unpaid_val)
@@ -550,20 +543,12 @@ class RevenueChartView(views.APIView):
                 else:
                     labels.append(f'{week_start.strftime("%b %d")} - {week_end.strftime("%b %d")}')
                 if chart_type == 'income':
-                    payments = Payment.objects.filter(
+                    # Revenue = ALL payments received in this week
+                    qs = Payment.objects.filter(
                         payment_date__gte=week_start,
                         payment_date__lte=week_end,
-                        member_id__in=active_member_ids
-                    ).select_related('member')
-                    # All received payments = Paid (green bar)
-                    paid_val = sum(float(p.amount) for p in payments if p.amount)
-                    # Pending = outstanding debts of members who paid this period
-                    seen_members = {}
-                    for p in payments:
-                        if p.member and p.member_id not in seen_members:
-                            seen_members[p.member_id] = float(p.member.remaining_debt)
-                    unpaid_val = sum(seen_members.values())
-                    total_val = paid_val + unpaid_val
+                    )
+                    total_val, paid_val, unpaid_val = self._get_income_data(qs)
                     values.append(total_val)
                     paid_values.append(paid_val)
                     unpaid_values.append(unpaid_val)
