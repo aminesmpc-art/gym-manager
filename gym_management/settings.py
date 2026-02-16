@@ -50,6 +50,10 @@ SHARED_APPS = [
     
     # Users must be shared for super admin auth to work
     'users',
+    
+    # Cloudinary for persistent media storage
+    'cloudinary_storage',
+    'cloudinary',
 ]
 
 # Tenant apps - each gym gets their own isolated data
@@ -175,6 +179,17 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # Media files (User uploads)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# Cloudinary Storage (persistent media on cloud)
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME', default=''),
+    'API_KEY': config('CLOUDINARY_API_KEY', default=''),
+    'API_SECRET': config('CLOUDINARY_API_SECRET', default=''),
+}
+
+# Use Cloudinary for all media uploads (member photos, etc.)
+if CLOUDINARY_STORAGE['CLOUD_NAME']:
+    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 
 # Default primary key field type
