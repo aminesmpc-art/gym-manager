@@ -10,6 +10,7 @@ class ActivityTypeSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'icon', 'color',
             'name_ar', 'name_fr', 'is_active', 'order',
+            'coefficient', 'hours_per_week',
             'plan_count', 'member_count'
         ]
         read_only_fields = ['plan_count', 'member_count']

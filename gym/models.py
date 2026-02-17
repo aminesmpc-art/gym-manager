@@ -77,6 +77,16 @@ class ActivityType(models.Model):
         default=0,
         help_text='Display order for UI sorting (lower = first)'
     )
+
+    # School-specific fields (coefficient for subject weighting, hours per week)
+    coefficient = models.PositiveIntegerField(
+        default=1,
+        help_text='Subject weight/coefficient for grading (1-10). Used by schools.'
+    )
+    hours_per_week = models.PositiveIntegerField(
+        default=0,
+        help_text='Weekly hours for this subject. Used by schools.'
+    )
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
