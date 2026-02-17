@@ -20,12 +20,44 @@ from users.serializers import (
 )
 from members.models import Member
 from gym_management.permissions import MemberAccessPolicy, IsAdminOrStaff
+from .models import Grade
 from .serializers import (
     SchoolStaffSerializer,
     SchoolStaffCreateSerializer,
     SchoolStaffUpdateSerializer,
     SchoolStudentSerializer,
+    GradeSerializer,
 )
+
+
+# ─── Grades / Classes ViewSet ─────────────────────────────────────────────
+
+class GradeViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for predefined grade/class levels.
+    GET    /api/school/grades/          → list all grades
+    POST   /api/school/grades/          → create { "name": "...", "order": 0 }
+    PATCH  /api/school/grades/{id}/     → rename (also updates member.grade_level)
+    DELETE /api/school/grades/{id}/     → delete (clears member.grade_level)
+    """
+    queryset = Grade.objects.all()
+    serializer_class = GradeSerializer
+    permission_classes = [IsAuthenticated, IsAdminOrStaff]
+
+    def perform_update(self, serializer):
+        """When a grade is renamed, update all members that reference the old name."""
+        old_name = serializer.instance.name
+        grade = serializer.save()
+        new_name = grade.name
+        if old_name != new_name:
+            updated = Member.objects.filter(grade_level=old_name).update(grade_level=new_name)
+            # Attach count to response for info
+            grade._members_updated = updated
+
+    def perform_destroy(self, instance):
+        """Clear grade_level for all members in this grade before deleting."""
+        Member.objects.filter(grade_level=instance.name).update(grade_level='')
+        instance.delete()
 
 
 # ─── School Staff (Teachers) ViewSet ───────────────────────────────────────

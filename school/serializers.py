@@ -7,6 +7,22 @@ from rest_framework import serializers
 from users.models import User, StaffPayment
 from members.models import Member
 from gym.models import ActivityType, MembershipPlan
+from .models import Grade
+
+
+# ─── Grade Serializer ──────────────────────────────────────────────────────
+
+class GradeSerializer(serializers.ModelSerializer):
+    """Serializer for Grade CRUD. Includes a read-only student count."""
+    students_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Grade
+        fields = ['id', 'name', 'order', 'students_count', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'students_count', 'created_at', 'updated_at']
+
+    def get_students_count(self, obj):
+        return Member.objects.filter(grade_level=obj.name, is_archived=False).count()
 
 
 # ─── Staff / Teacher Serializers ───────────────────────────────────────────
