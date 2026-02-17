@@ -52,6 +52,22 @@ class User(AbstractUser):
         blank=True,
         help_text='Contact phone number'
     )
+    # Teacher-specific fields (used by school tenants)
+    subject = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text='Subject taught (for school teachers)'
+    )
+    classes_taught = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text='Classes/grades taught (for school teachers)'
+    )
+    qualification = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text='Teaching qualification (for school teachers)'
+    )
     is_archived = models.BooleanField(
         default=False,
         help_text='Archived users are hidden but not deleted'

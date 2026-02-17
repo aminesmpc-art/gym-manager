@@ -69,6 +69,7 @@ TENANT_APPS = [
     'attendance',
     'reports',
     'notifications',
+    'school',
 ]
 
 # Combined - all apps available

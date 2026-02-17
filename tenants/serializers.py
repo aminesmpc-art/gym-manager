@@ -26,6 +26,7 @@ class GymSerializer(serializers.ModelSerializer):
             'owner_name',
             'owner_email',
             'owner_phone',
+            'business_type',
             'status',
             'subscription_plan',
             'subscription_status',

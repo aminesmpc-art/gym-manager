@@ -106,6 +106,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'allowed_gender': user.allowed_gender,
                 'gym_slug': gym_slug,
                 'gym_name': gym.name,
+                'business_type': getattr(gym, 'business_type', 'gym'),
             }
         
         return data

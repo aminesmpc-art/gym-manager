@@ -70,6 +70,12 @@ class Member(models.Model):
     member_code = models.CharField(max_length=20, unique=True, null=True, blank=True, help_text='Gym Member ID (scan/entry)')
     photo = models.ImageField(upload_to='members/photos/', blank=True, null=True)
     
+    # School-specific fields (used by school tenants)
+    grade_level = models.CharField(max_length=50, blank=True, help_text='Grade/class level (for school students)')
+    parent_name = models.CharField(max_length=100, blank=True, help_text='Parent/guardian name')
+    parent_phone = models.CharField(max_length=20, blank=True, help_text='Parent/guardian phone')
+    parent_email = models.EmailField(blank=True, help_text='Parent/guardian email')
+    
     # Financials
     insurance_paid = models.BooleanField(default=False, help_text='Has paid yearly insurance')
     insurance_year = models.CharField(max_length=4, blank=True, help_text='Year of insurance payment')

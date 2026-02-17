@@ -19,6 +19,8 @@ def root(request):
                 "/api/subscriptions/",
                 "/api/attendance/",
                 "/api/reports/",
+                "/api/school/staff/",
+                "/api/school/students/",
             ],
         }
     )
@@ -47,6 +49,9 @@ urlpatterns = [
     path('api/attendance/', include('attendance.urls')),
     path('api/reports/', include('reports.urls')),
     path('api/verify/', include('notifications.urls')),
+    
+    # School-specific endpoints (separate from gym endpoints)
+    path('api/school/', include('school.urls')),
     
     # Super Admin - Tenant Management
     path('api/tenants/', include('tenants.urls')),

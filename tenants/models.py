@@ -28,12 +28,24 @@ class Gym(TenantMixin):
         EXPIRED = 'expired', 'Expired'
         TRIAL = 'trial', 'Trial'
     
+    class BusinessType(models.TextChoices):
+        GYM = 'gym', 'Gym'
+        SCHOOL = 'school', 'School'
+    
     # Gym details
     name = models.CharField(max_length=100)
     slug = models.SlugField(unique=True, help_text='URL-friendly name (e.g., powerhouse-gym)')
     owner_name = models.CharField(max_length=100)
     owner_email = models.EmailField()
     owner_phone = models.CharField(max_length=20)
+    
+    # Business type
+    business_type = models.CharField(
+        max_length=10,
+        choices=BusinessType.choices,
+        default=BusinessType.GYM,
+        help_text='Type of business: gym or school'
+    )
     
     # Status
     status = models.CharField(
