@@ -2,17 +2,46 @@
 License management API views.
 - Super admin: CRUD + generate/revoke/renew/unbind
 - Local app: verify endpoint (no auth required)
+
+Security:
+- All verify responses are signed with HMAC-SHA256 (X-Response-Signature header)
+- The local app verifies this signature to prevent fake server attacks (MITM)
 """
+
+import hmac
+import hashlib
+import json
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
+from django.http import HttpResponse
 from django.utils import timezone
 from django.db.models import Count, Q
 from .models import License
 from .serializers import LicenseSerializer, GenerateLicenseSerializer, VerifyLicenseSerializer
+
+# Must match the secret in the Flutter app's SecurityService
+HMAC_SECRET = 'MOL-GYM-HMAC-K3Y-2026-s3cur3-!@#'
+
+
+def signed_response(data, http_status=200):
+    """
+    Create an HTTP response with HMAC-SHA256 signature.
+    Uses raw HttpResponse so the body is EXACTLY what we sign.
+    The Flutter app verifies this signature to prevent fake servers.
+    """
+    body = json.dumps(data)
+    signature = hmac.new(
+        HMAC_SECRET.encode('utf-8'),
+        body.encode('utf-8'),
+        hashlib.sha256,
+    ).hexdigest()
+    response = HttpResponse(body, content_type='application/json', status=http_status)
+    response['X-Response-Signature'] = signature
+    return response
 
 
 class LicenseViewSet(viewsets.ModelViewSet):
@@ -164,14 +193,14 @@ class VerifyLicenseView(APIView):
         try:
             license = License.objects.get(license_key=license_key)
         except License.DoesNotExist:
-            return Response({
+            return signed_response({
                 'valid': False,
                 'message': 'Invalid license key.',
-            }, status=status.HTTP_200_OK)
+            })
 
         # Check if revoked
         if license.status == License.Status.REVOKED:
-            return Response({
+            return signed_response({
                 'valid': False,
                 'message': 'This license has been revoked. Contact support.',
             })
@@ -182,7 +211,7 @@ class VerifyLicenseView(APIView):
             if license.status != License.Status.EXPIRED:
                 license.status = License.Status.EXPIRED
                 license.save()
-            return Response({
+            return signed_response({
                 'valid': False,
                 'message': f'License expired on {license.expires_at.strftime("%Y-%m-%d")}.',
             })
@@ -190,7 +219,7 @@ class VerifyLicenseView(APIView):
         # Device binding check
         if device_id:
             if license.device_id and license.device_id != device_id:
-                return Response({
+                return signed_response({
                     'valid': False,
                     'message': 'This license is already activated on another device.',
                 })
@@ -202,7 +231,7 @@ class VerifyLicenseView(APIView):
         license.last_verified_at = timezone.now()
         license.save()
 
-        return Response({
+        return signed_response({
             'valid': True,
             'message': 'License valid.',
             'tier': license.tier,
