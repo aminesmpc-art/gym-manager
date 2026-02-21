@@ -55,6 +55,9 @@ urlpatterns = [
     
     # Super Admin - Tenant Management
     path('api/tenants/', include('tenants.urls')),
+    
+    # License Management for offline app
+    path('api/licenses/', include('licenses.urls')),
 ]
 
 # Serve media files in development

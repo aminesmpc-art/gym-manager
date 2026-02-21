@@ -54,6 +54,9 @@ SHARED_APPS = [
     # Cloudinary for persistent media storage
     'cloudinary_storage',
     'cloudinary',
+    
+    # License management for offline app
+    'licenses',
 ]
 
 # Tenant apps - each gym gets their own isolated data
